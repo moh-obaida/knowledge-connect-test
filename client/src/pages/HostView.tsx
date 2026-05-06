@@ -163,6 +163,9 @@ type StarterTemplate = {
   categories: string[];
   level: "سهل" | "متوسط" | "صعب";
   questions: string[];
+  boardBanks?: Array<{ cellId:string; label:string; questionBank:any[] }>;
+  createdAt?: string;
+  userCreated?: boolean;
 };
 const COMMUNITY_TEMPLATES_KEY = "knowledgeConnectCommunityTemplates";
 const STARTER_TEMPLATES: StarterTemplate[] = [
@@ -223,6 +226,10 @@ export default function HostView() {
   const [confirmAction, setConfirmAction] = useState<(()=>void)|null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<StarterTemplate | null>(null);
   const [communityTemplates, setCommunityTemplates] = useState<StarterTemplate[]>([]);
+  const [templateName, setTemplateName] = useState("");
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [templateCategory, setTemplateCategory] = useState("");
+  const [templateLevel, setTemplateLevel] = useState("");
   const unsubRef = useRef<(()=>void)|null>(null);
   const roomRef = useRef<RoomState|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
@@ -466,6 +473,8 @@ export default function HostView() {
         ...tpl,
         id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         name: `نسخة من ${tpl.name}`,
+        userCreated: true,
+        createdAt: new Date().toISOString(),
       };
       const next = [copy, ...communityTemplates].slice(0, 50);
       setCommunityTemplates(next);
@@ -481,18 +490,76 @@ export default function HostView() {
     const ok = window.confirm("سيتم استبدال مجموعة الأسئلة الحالية بهذا القالب. هل تريد المتابعة؟");
     if (!ok) return;
     try {
-      const nextBoard = room.board.map((cell, idx) => ({
-        ...cell,
-        question: tpl.questions[idx % tpl.questions.length] || "",
-        answer: "",
-        category: tpl.categories[0] || "",
-        difficulty: (tpl.level === "سهل" ? "easy" : tpl.level === "متوسط" ? "medium" : "hard") as BoardCell["difficulty"],
-      }));
+      const nextBoard = room.board.map((cell, idx) => {
+        const legacy = tpl.questions[idx % tpl.questions.length] || "";
+        const found = tpl.boardBanks?.find(b=>b.cellId===cell.id || b.label===cell.label);
+        const bank = Array.isArray(found?.questionBank) && found!.questionBank.length
+          ? found!.questionBank
+          : (legacy ? [{ question: legacy, answer: "", category: tpl.categories[0] || "غير مصنف", difficulty: (tpl.level === "سهل" ? "easy" : tpl.level === "متوسط" ? "medium" : "hard"), points:1, hint:"", explanation:"" }] : []);
+        const first = bank[0];
+        return {
+          ...cell,
+          question: first?.question || "",
+          answer: first?.answer || "",
+          category: first?.category || "",
+          difficulty: (first?.difficulty || "medium") as BoardCell["difficulty"],
+          hint: first?.hint || "",
+          explanation: first?.explanation || "",
+          ...( { questionBank: bank } as any),
+        };
+      });
       await push({ board: nextBoard });
       showToast.success("تم تحميل القالب.");
     } catch {
       showToast.error("تعذر تحميل القالب. يرجى المحاولة مرة أخرى.");
     }
+  };
+  const saveCurrentAsTemplate = () => {
+    if (!room) return;
+    if (!templateName.trim()) { showToast.warning("يرجى إدخال اسم القالب."); return; }
+    const withQ = room.board.filter(c=>c.question.trim() || (Array.isArray((c as any).questionBank) && (c as any).questionBank.length));
+    if (!withQ.length) { showToast.warning("أضف سؤالًا واحدًا على الأقل قبل حفظ القالب."); return; }
+    const boardBanks = room.board.map(c=>{
+      const bank = Array.isArray((c as any).questionBank) && (c as any).questionBank.length ? (c as any).questionBank : (c.question ? [{ question:c.question, answer:c.answer, category:c.category||"غير مصنف", difficulty:c.difficulty, points:c.points||1, hint:c.hint||"", explanation:c.explanation||"" }] : []);
+      return { cellId:c.id, label:c.label, questionBank: bank };
+    });
+    const totalQuestions = boardBanks.reduce((n,b)=>n+b.questionBank.length,0);
+    const cats = Array.from(new Set(boardBanks.flatMap(b=>b.questionBank.map((q:any)=>q.category||"غير مصنف"))));
+    const tpl: StarterTemplate = { id:`u_${Date.now()}`, name:templateName.trim(), categories:cats as string[], level:"متوسط", questions:boardBanks.flatMap(b=>b.questionBank.map((q:any)=>q.question)).slice(0, 40), boardBanks, createdAt:new Date().toISOString(), userCreated:true };
+    const next=[tpl, ...communityTemplates];
+    setCommunityTemplates(next);
+    localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
+    setTemplateName("");
+    showToast.success("تم حفظ القالب بنجاح.");
+    if (!totalQuestions) return;
+  };
+  const deleteTemplate = (tpl: StarterTemplate) => {
+    if (!tpl.userCreated) { showToast.info("لا يمكن حذف القوالب الجاهزة."); return; }
+    if (!window.confirm("هل تريد حذف هذا القالب؟")) return;
+    const next = communityTemplates.filter(t=>t.id!==tpl.id);
+    setCommunityTemplates(next);
+    localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
+    showToast.success("تم حذف القالب.");
+  };
+  const exportTemplate = (tpl: StarterTemplate) => {
+    const blob = new Blob([JSON.stringify(tpl, null, 2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url; a.download=`template-${tpl.name}.json`; a.click(); URL.revokeObjectURL(url);
+  };
+  const importTemplate = () => {
+    const input = document.createElement("input"); input.type="file"; input.accept=".json";
+    input.onchange = async e => {
+      try {
+        const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return;
+        const parsed = JSON.parse(await file.text());
+        if (!parsed || typeof parsed.name!=="string") throw new Error();
+        const tpl: StarterTemplate = { id:`u_${Date.now()}`, name:parsed.name, categories:Array.isArray(parsed.categories)?parsed.categories:["غير مصنف"], level:parsed.level==="سهل"||parsed.level==="متوسط"||parsed.level==="صعب"?parsed.level:"متوسط", questions:Array.isArray(parsed.questions)?parsed.questions:[], boardBanks:Array.isArray(parsed.boardBanks)?parsed.boardBanks:[], createdAt:new Date().toISOString(), userCreated:true };
+        const next=[tpl, ...communityTemplates];
+        setCommunityTemplates(next); localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
+        showToast.success("تم استيراد القالب بنجاح.");
+      } catch { showToast.error("تعذر استيراد القالب. تأكد من أن الملف صحيح."); }
+    };
+    input.click();
   };
 
   // ── Firebase not configured ──
@@ -559,10 +626,15 @@ export default function HostView() {
             <div style={{ fontWeight:800, color:"#f59e0b", marginBottom:"0.45rem" }}>معاينة</div>
             <div style={{ fontWeight:700, color:"#f0ede8", marginBottom:"0.35rem" }}>{previewTemplate.name}</div>
             <div style={{ fontSize:"0.8rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
-              التصنيف: {previewTemplate.categories.join("، ")} • المستوى: {previewTemplate.level} • عدد الأسئلة: {previewTemplate.questions.length}
+              التصنيف: {previewTemplate.categories.join("، ")} • المستوى: {previewTemplate.level} • عدد الأسئلة الإجمالي: {previewTemplate.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || previewTemplate.questions.length} • عدد الحروف: {previewTemplate.boardBanks?.filter(b=>b.questionBank?.length).length || 0}
             </div>
+            {previewTemplate.boardBanks && previewTemplate.boardBanks.length > 0 && (
+              <div style={{ fontSize:"0.75rem", color:"#64748b", marginBottom:"0.55rem" }}>
+                {previewTemplate.boardBanks.filter(b=>b.questionBank?.length).slice(0,6).map(b=>`${b.label}: ${b.questionBank.length}`).join(" • ")}
+              </div>
+            )}
             <div style={{ display:"flex", flexDirection:"column", gap:"0.35rem", marginBottom:"0.8rem" }}>
-              {previewTemplate.questions.slice(0,5).map((q, i)=>(
+              {(previewTemplate.boardBanks?.flatMap(b=>b.questionBank.map((q:any)=>q.question)) || previewTemplate.questions).slice(0,5).map((q, i)=>(
                 <div key={i} style={{ fontSize:"0.86rem", color:"#f0ede8" }}>• {q}</div>
               ))}
             </div>
@@ -708,23 +780,40 @@ export default function HostView() {
             </div>
 
             <div className="kc-card" style={{ gridColumn:"1 / -1" }}>
-              <div className="section-title">قوالب جاهزة</div>
+              <div className="section-title">قوالب المجتمع</div>
               <div style={{ fontSize:"0.82rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
-                اختر قالبًا جاهزًا، ثم عاينه أو استخدمه مباشرة لتعبئة أسئلة الحروف.
+                احفظ بنك الأسئلة الحالي كقالب، أو استخدم قالبًا جاهزًا/محفوظًا.
+              </div>
+              <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
+                <input className="kc-input" style={{ maxWidth:240 }} placeholder="اسم القالب" value={templateName} onChange={e=>setTemplateName(e.target.value)} />
+                <button className="btn-gold" onClick={saveCurrentAsTemplate}>حفظ كقالب</button>
+                <button className="btn-secondary" onClick={importTemplate}>استيراد قالب</button>
+              </div>
+              <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
+                <input className="kc-input" style={{ maxWidth:240 }} placeholder="ابحث عن قالب..." value={templateSearch} onChange={e=>setTemplateSearch(e.target.value)} />
+                <select className="kc-input" style={{ maxWidth:180 }} value={templateCategory} onChange={e=>setTemplateCategory(e.target.value)}>
+                  <option value="">التصنيف</option><option value="إسلاميات">إسلاميات</option><option value="لغة عربية">لغة عربية</option><option value="رياضيات">رياضيات</option><option value="معرفة عامة">معرفة عامة</option><option value="مفردات">مفردات</option><option value="قراءة وفهم">قراءة وفهم</option><option value="تقنية">تقنية</option><option value="حياة يومية">حياة يومية</option><option value="غير مصنف">غير مصنف</option>
+                </select>
+                <select className="kc-input" style={{ maxWidth:160 }} value={templateLevel} onChange={e=>setTemplateLevel(e.target.value)}>
+                  <option value="">المستوى</option><option value="سهل">سهل</option><option value="متوسط">متوسط</option><option value="صعب">صعب</option>
+                </select>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.75rem" }}>
-                {[...STARTER_TEMPLATES, ...communityTemplates].map(tpl => (
+                {[...STARTER_TEMPLATES, ...communityTemplates].filter(tpl=>!templateSearch || tpl.name.includes(templateSearch)).filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory)).filter(tpl=>!templateLevel || tpl.level===templateLevel).map(tpl => (
                   <div key={tpl.id} style={{ background:"#141e2d", border:"1.5px solid #1a2332", borderRadius:"14px", padding:"0.85rem" }}>
                     <div style={{ fontWeight:800, color:"#f0ede8", marginBottom:"0.35rem" }}>اسم القالب: {tpl.name}</div>
                     <div style={{ fontSize:"0.74rem", color:"#94a3b8", lineHeight:1.8 }}>
                       <div>التصنيفات: {tpl.categories.join("، ")}</div>
                       <div>المستوى: {tpl.level}</div>
-                      <div>عدد الأسئلة: {tpl.questions.length}</div>
+                      <div>عدد الأسئلة: {tpl.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || tpl.questions.length}</div>
+                      {tpl.createdAt && <div>تاريخ الحفظ: {new Date(tpl.createdAt).toLocaleDateString("ar")}</div>}
                     </div>
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginTop:"0.7rem" }}>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
                       <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدام القالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>نسخ القالب</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير القالب</button>
+                      {tpl.userCreated && <button className="btn-danger" style={{ fontSize:"0.75rem" }} onClick={()=>deleteTemplate(tpl)}>حذف القالب</button>}
                     </div>
                   </div>
                 ))}
