@@ -81,7 +81,7 @@ export default function HexBoard({
               key={cell.id}
               title={
                 mode === "setup"
-                  ? hasQ ? "يحتوي على سؤال — اضغط للتعديل" : "لا يوجد سؤال — اضغط للإضافة"
+                  ? hasQ ? "تم إعداد سؤال — اضغط للتعديل" : "لا يوجد سؤال بعد — اضغط للإضافة"
                   : cell.claimedBy !== 0 ? "تم حجز هذا الحرف" : ""
               }
               onClick={() => clickable && onCellClick!(cell)}

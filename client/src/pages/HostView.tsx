@@ -391,12 +391,12 @@ export default function HostView() {
           <div style={{ fontSize:"1.5rem", fontWeight:800, color:"#f59e0b", marginBottom:"0.75rem" }}>وصلة المعرفة</div>
           <div style={{ fontSize:"1rem", fontWeight:600, color:"#ef4444", marginBottom:"1rem" }}>تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا.</div>
           <div style={{ background:"#0f1623", border:"1.5px solid #1a2332", borderRadius:"16px", padding:"1.5rem", textAlign:"right" }}>
-            <div className="section-title">خطوات الإعداد</div>
+            <div className="section-title">إرشادات سريعة</div>
             <ol style={{ color:"#94a3b8", fontSize:"0.85rem", lineHeight:2, paddingRight:"1.25rem" }}>
               <li>تحقق من تفعيل الخدمة من خلال <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" style={{ color:"#f59e0b" }}>لوحة الإعدادات</a></li>
               <li>تأكد من جاهزية الخدمة للعب المباشر</li>
               <li>راجع <code style={{ color:"#f59e0b" }}>إعدادات المشروع</code> وتأكد من اكتمالها</li>
-              <li>أعد تشغيل التطبيق ثم حاول مرة أخرى</li>
+              <li>أعد المحاولة بعد التأكد من الإعدادات</li>
             </ol>
           </div>
         </div>
@@ -412,8 +412,8 @@ export default function HostView() {
         <div style={{ color:"#475569", marginBottom:"3rem", fontSize:"0.9rem" }}>تحدي الفرق التفاعلي للفصل الدراسي</div>
         <div style={{ background:"#0f1623", border:"1.5px solid #1a2332", borderRadius:"20px", padding:"2.5rem", maxWidth:380, width:"100%", textAlign:"center" }}>
           <div style={{ fontSize:"2.5rem", marginBottom:"1rem" }}>🎮</div>
-          <div style={{ fontWeight:700, fontSize:"1.1rem", color:"#f0ede8", marginBottom:"0.5rem" }}>لوحة التحكم للمضيف</div>
-          <div style={{ color:"#64748b", fontSize:"0.85rem", marginBottom:"2rem" }}>أنشئ غرفة جديدة لبدء اللعبة</div>
+          <div style={{ fontWeight:700, fontSize:"1.1rem", color:"#f0ede8", marginBottom:"0.5rem" }}>لوحة تحكم المضيف</div>
+          <div style={{ color:"#64748b", fontSize:"0.85rem", marginBottom:"2rem" }}>ابدأ تحديًا جديدًا ثم شارك رمز الانضمام مع الفرق</div>
           <button className="btn-gold" style={{ width:"100%", padding:"0.85rem", fontSize:"1rem" }}
             onClick={handleCreate} disabled={creating}>
             {creating ? "جارٍ الإنشاء..." : "إنشاء غرفة جديدة 🚀"}
@@ -474,7 +474,7 @@ export default function HostView() {
                 {room.gameStatus==="lobby" ? "انتظار" : room.gameStatus==="active" ? `جارية • الجولة ${room.roundNumber}` : "منتهية"}
               </span>
               <span style={{ fontSize:"0.7rem", padding:"0.2rem 0.5rem", borderRadius:"6px", background:"#1a2332", color:"#64748b" }}>
-                🏷 لوحة التحكم للمضيف
+                🏷 لوحة تحكم المضيف
               </span>
             </div>
             <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
