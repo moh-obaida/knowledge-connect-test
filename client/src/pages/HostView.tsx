@@ -109,7 +109,7 @@ function CellEditor({ cell, onSave, onClose }: {
                 </div>
               ))}
             </div>
-            <button className="btn-gold" style={{ fontSize:"0.72rem", marginTop:"0.45rem" }} onClick={()=>{ setEditingIndex(-1); setQ(""); setA(""); setCat("غير مصنف"); setDiff("medium"); setPts(1); setHint(""); setExpl(""); }}>إضافة سؤال لهذا الحرف</button>
+            <button className="btn-gold" style={{ fontSize:"0.72rem", marginTop:"0.45rem" }} onClick={()=>{ setEditingIndex(-1); setQ(""); setA(""); setCat("غير مصنف"); setDiff("medium"); setPts(1); setHint(""); setExpl(""); }}>إضافة سؤال</button>
           </div>
           <div>
             <label style={lbl}>نص السؤال *</label>
@@ -146,7 +146,7 @@ function CellEditor({ cell, onSave, onClose }: {
             <textarea value={expl} onChange={e=>setExpl(e.target.value)} rows={2} placeholder="اكتب شرحًا اختياريًا..." className="kc-input" style={{ resize:"vertical" }} />
           </div>
           <div style={{ display:"flex", gap:"0.75rem", paddingTop:"0.5rem" }}>
-            <button className="btn-gold" style={{ flex:1 }} onClick={save}>💾 حفظ السؤال</button>
+            <button className="btn-gold" style={{ flex:1 }} onClick={save}>💾 تعديل السؤال</button>
             <button className="btn-danger" onClick={()=>onSave({ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"" })}>مسح</button>
             <button className="btn-secondary" onClick={onClose}>إلغاء</button>
           </div>
@@ -359,6 +359,7 @@ export default function HostView() {
   // Cell click
   const handleCellClick = (cell: BoardCell) => {
     if (!room) return;
+    if (room.winnerTeam !== 0) { showToast.info("انتهت اللعبة بالفعل. اضغط إعادة اللعب للبدء من جديد."); return; }
     const getCellBank = (c: BoardCell) => Array.isArray((c as any).questionBank) && (c as any).questionBank.length
       ? (c as any).questionBank
       : (c.question ? [{ question: c.question, answer: c.answer, category: c.category, difficulty: c.difficulty, points: c.points, hint: c.hint, explanation: c.explanation }] : []);
@@ -402,7 +403,7 @@ export default function HostView() {
     const pts = room.activeQuestion?.points || 1;
     const scoreUp = room.activeTeam===1 ? { team1Score: room.team1Score+pts } : { team2Score: room.team2Score+pts };
     const winner = checkWinner(nb, room.gridSize);
-    const winMsg = winner===1 ? `🏆 ${room.team1.name} فاز!` : winner===2 ? `🏆 ${room.team2.name} فاز!` : "";
+    const winMsg = winner===1 ? `فاز ${room.team1.name}!` : winner===2 ? `فاز ${room.team2.name}!` : "";
     await push({ board:nb, ...scoreUp, questionStatus:"correct", selectedCellId:"",
       winnerMessage: winMsg, winnerTeam: winner,
       gameStatus: winMsg ? "finished" : room.gameStatus });
@@ -412,6 +413,7 @@ export default function HostView() {
   const [actionLock, setActionLock] = useState(false);
   const markCorrect = async () => {
     if (!room?.activeQuestion || actionLock) return;
+    if (room.winnerTeam !== 0) { showToast.info("انتهت اللعبة بالفعل. اضغط إعادة اللعب للبدء من جديد."); return; }
     setActionLock(true);
     try { await claimCell(room.activeQuestion.cellId); } finally { setActionLock(false); }
   };
@@ -636,8 +638,8 @@ export default function HostView() {
       });
       await push({ board: nextBoard });
       if (skipped > 0) showToast.warning("تم تجاهل بعض الأسئلة لأنها لا تطابق الحروف المحددة.");
-      showToast.success("تم تحميل القالب وتوزيع الأسئلة على جميع الحروف.");
-      if (missingLetters > 0) showToast.info("تم تحميل القالب، لكن بعض الحروف لا تحتوي على أسئلة.");
+      showToast.success("تم تحميل القالب بنجاح.");
+      if (missingLetters > 0) showToast.info("بعض الحروف لا تحتوي على أسئلة بعد.");
     } catch {
       showToast.error("تعذر تحميل القالب. يرجى المحاولة مرة أخرى.");
     }
@@ -658,7 +660,7 @@ export default function HostView() {
     setCommunityTemplates(next);
     localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
     setTemplateName("");
-    showToast.success("تم حفظ القالب بنجاح.");
+    showToast.success("تم حفظ القالب محلياً.");
     if (!totalQuestions) return;
   };
   const deleteTemplate = (tpl: StarterTemplate) => {
@@ -763,7 +765,7 @@ export default function HostView() {
         const next=[tpl, ...communityTemplates];
         setCommunityTemplates(next); localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
         showToast.success("تم استيراد القالب بنجاح.");
-      } catch { showToast.error("تعذر استيراد القالب. تأكد من أن الملف صحيح."); }
+      } catch { showToast.error("تعذر قراءة القالب. تأكد من أن الملف صحيح."); }
     };
     input.click();
   };
@@ -849,15 +851,30 @@ export default function HostView() {
         </div>
       )}
 
-      {/* Winner overlay */}
+      {/* Winner panel */}
       {room.winnerMessage && (
-        <div className="winner-overlay">
-          <div className="winner-card" style={{ borderColor: room.winnerTeam===1 ? room.team1.color : room.winnerTeam===2 ? room.team2.color : "#f59e0b" }}>
-            <div style={{ fontSize:"4rem", marginBottom:"1rem" }}>🏆</div>
-            <div style={{ fontSize:"2rem", fontWeight:900, color: room.winnerTeam===1 ? room.team1.color : room.winnerTeam===2 ? room.team2.color : "#f59e0b" }}>
-              {room.winnerMessage}
+        <div style={{ position:"sticky", top:"0.75rem", zIndex:40, margin:"0.75rem" }}>
+          <div className="kc-card" style={{ border:`2px solid ${room.winnerTeam===1 ? room.team1.color : room.team2.color}`, background:"linear-gradient(135deg,#0f1623,#1a2332)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"0.75rem", flexWrap:"wrap" }}>
+              <div>
+                <div style={{ fontSize:"1.5rem", fontWeight:900, color: room.winnerTeam===1 ? room.team1.color : room.team2.color }}>
+                  {room.winnerMessage}
+                </div>
+                <div style={{ fontSize:"0.85rem", color:"#94a3b8" }}>انتهت الجولة الحالية. يمكنك إعادة اللعب أو الرجوع للقوالب.</div>
+              </div>
+              <div style={{ display:"flex", gap:"0.6rem", flexWrap:"wrap" }}>
+                <span className="badge-chip" style={{ borderColor: room.team1.color, color: room.team1.color }}>
+                  {room.team1.name}: {room.board.filter(c=>c.claimedBy===1).length}
+                </span>
+                <span className="badge-chip" style={{ borderColor: room.team2.color, color: room.team2.color }}>
+                  {room.team2.name}: {room.board.filter(c=>c.claimedBy===2).length}
+                </span>
+              </div>
+              <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
+                <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
+                <button className="btn-secondary" onClick={()=>setActiveTab("setup")}>الرجوع للقوالب</button>
+              </div>
             </div>
-            <button className="btn-secondary" style={{ marginTop:"1.5rem" }} onClick={()=>push({ winnerMessage:"", winnerTeam:0 })}>إغلاق</button>
           </div>
         </div>
       )}
@@ -887,7 +904,7 @@ export default function HostView() {
             </div>
             <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
               {room.gameStatus==="lobby" && <button className="btn-gold" style={{ fontSize:"0.8rem" }} onClick={startGame}>▶ بدء اللعبة</button>}
-              <button className="btn-danger" style={{ fontSize:"0.8rem" }} onClick={resetGame}>↺ إعادة الضبط</button>
+              <button className="btn-danger" style={{ fontSize:"0.8rem" }} onClick={resetGame}>↺ إعادة اللعب</button>
             </div>
           </div>
           {/* Link row */}
@@ -998,8 +1015,8 @@ export default function HostView() {
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="اسم القالب" value={templateName} onChange={e=>setTemplateName(e.target.value)} />
-                <button className="btn-gold" onClick={saveCurrentAsTemplate}>إنشاء لعبة جديدة</button>
-                <button className="btn-secondary" onClick={importTemplate}>استيراد قالب (محلي)</button>
+                <button className="btn-gold" onClick={saveCurrentAsTemplate}>حفظ كقالب محلي</button>
+                <button className="btn-secondary" onClick={importTemplate}>استيراد قالب</button>
                 <button className="btn-secondary" onClick={importTemplateCsv}>استيراد من جدول (محلي)</button>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
@@ -1034,7 +1051,7 @@ export default function HostView() {
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
                       <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدم القالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>نسخ القالب</button>
-                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير القالب</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير قالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplateCsv(tpl)}>تصدير كجدول</button>
                       {tpl.userCreated && <button className="btn-danger" style={{ fontSize:"0.75rem" }} onClick={()=>deleteTemplate(tpl)}>حذف القالب</button>}
                     </div>
@@ -1156,10 +1173,10 @@ export default function HostView() {
                     </div>
                     {/* Correct / Wrong / Steal / Skip / Next */}
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
-                      <button className="btn-green" style={{ fontSize:"0.85rem" }} onClick={markCorrect}>✅ إجابة صحيحة</button>
+                      <button className="btn-green" style={{ fontSize:"0.85rem" }} onClick={markCorrect}>✅ تحقق من الإجابة</button>
                       <button className="btn-danger" style={{ fontSize:"0.85rem" }} onClick={markWrong}>❌ إجابة خاطئة</button>
                       {room.stealMode!=="none" && <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={allowSteal}>🔄 فرصة سرقة</button>}
-                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={skipQ}>⏭ تخطي</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={skipQ}>⏭ تخطي السؤال</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={cancelQuestion}>❌ إلغاء السؤال الحالي</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={nextQuestion}>➡ السؤال التالي</button>
                     </div>
