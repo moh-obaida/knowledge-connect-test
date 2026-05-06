@@ -177,6 +177,12 @@ type TemplateQuestionItem = {
   explanation?: string;
 };
 const COMMUNITY_TEMPLATES_KEY = "knowledgeConnectCommunityTemplates";
+const ARABIC_LETTERS_FULL = ["أ","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","هـ","و","ي"];
+const LETTER_WORDS: Record<string, string> = {
+  "أ":"أمل","ب":"بدر","ت":"تفاح","ث":"ثعلب","ج":"جبل","ح":"حكمة","خ":"خريطة","د":"درس","ذ":"ذهب","ر":"ربيع",
+  "ز":"زيتون","س":"سلام","ش":"شمس","ص":"صبر","ض":"ضوء","ط":"طريق","ظ":"ظلال","ع":"علم","غ":"غيمة","ف":"فكرة",
+  "ق":"قصة","ك":"كتاب","ل":"لغة","م":"مدرسة","ن":"نخلة","هـ":"هلال","و":"وردة","ي":"يقين",
+};
 const ARABIC_LETTER_NORMALIZE: Record<string, string> = { "أ":"ا", "إ":"ا", "آ":"ا", "ٱ":"ا", "ة":"ه", "ى":"ي" };
 const normalizeArabicLetter = (value?: string) => {
   const ch = (value || "").trim().charAt(0);
@@ -187,11 +193,28 @@ const questionInitialLetter = (item: Partial<TemplateQuestionItem>) => {
   if (item.answer) return normalizeArabicLetter(item.answer);
   return "";
 };
+const createFullLetterTemplate = (id: string, name: string, category: string, level: "سهل" | "متوسط" | "صعب"): StarterTemplate => {
+  const boardBanks = ARABIC_LETTERS_FULL.map((letter) => ({
+    cellId: "",
+    label: letter,
+    questionBank: [{
+      letter,
+      question: `اذكر كلمة ${category === "تقنية" ? "تقنية " : ""}تبدأ بحرف ${letter}.`,
+      answer: LETTER_WORDS[letter] || `كلمة ${letter}`,
+      category,
+      difficulty: level === "سهل" ? "easy" : level === "صعب" ? "hard" : "medium",
+      points: 1,
+      hint: "",
+      explanation: "",
+    }],
+  }));
+  return { id, name, categories: [category], level, questions: boardBanks.map(b => b.questionBank[0].question), boardBanks };
+};
 const STARTER_TEMPLATES: StarterTemplate[] = [
-  { id:"teen1", name:"تحدي الثقافة العامة", categories:["ثقافة عامة"], level:"متوسط", questions:["اذكر عاصمة عربية تبدأ بحرف الألف.","اذكر دولة أو مدينة تبدأ بحرف الباء.","اذكر مادة دراسية تبدأ بحرف الجيم.","اذكر وسيلة نقل تبدأ بحرف الطاء.","اذكر شيئًا نقرأه يبدأ بحرف القاف."], boardBanks:[{ cellId:"", label:"أ", questionBank:[{ question:"اذكر عاصمة عربية تبدأ بحرف الألف.", answer:"أبوظبي", category:"ثقافة عامة", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ب", questionBank:[{ question:"اذكر دولة أو مدينة تبدأ بحرف الباء.", answer:"بغداد", category:"ثقافة عامة", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ج", questionBank:[{ question:"اذكر مادة دراسية تبدأ بحرف الجيم.", answer:"جغرافيا", category:"ثقافة عامة", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ط", questionBank:[{ question:"اذكر وسيلة نقل تبدأ بحرف الطاء.", answer:"طائرة", category:"ثقافة عامة", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ق", questionBank:[{ question:"اذكر شيئًا نقرأه يبدأ بحرف القاف.", answer:"قصة", category:"ثقافة عامة", difficulty:"medium", points:1, hint:"", explanation:"" }] }] },
-  { id:"teen2", name:"تحدي التقنية والذكاء الاصطناعي", categories:["تقنية"], level:"متوسط", questions:["اذكر كلمة تقنية تبدأ بحرف التاء.","اذكر جهازًا يتصل بالشبكة ويبدأ بحرف الراء.","اذكر مفهومًا تقنيًا يبدأ بحرف السين.","اذكر جزءًا من الحاسوب يبدأ بحرف الكاف.","اذكر منصة رقمية تبدأ بحرف الياء."], boardBanks:[{ cellId:"", label:"ت", questionBank:[{ question:"اذكر كلمة تقنية تبدأ بحرف التاء.", answer:"تطبيق", category:"تقنية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ر", questionBank:[{ question:"اذكر جهازًا يتصل بالشبكة ويبدأ بحرف الراء.", answer:"راوتر", category:"تقنية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"س", questionBank:[{ question:"اذكر مفهومًا تقنيًا يبدأ بحرف السين.", answer:"سيرفر", category:"تقنية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ك", questionBank:[{ question:"اذكر جزءًا من الحاسوب يبدأ بحرف الكاف.", answer:"كاميرا", category:"تقنية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ي", questionBank:[{ question:"اذكر منصة رقمية تبدأ بحرف الياء.", answer:"يوتيوب", category:"تقنية", difficulty:"medium", points:1, hint:"", explanation:"" }] }] },
-  { id:"teen3", name:"تحدي القيم والحياة اليومية", categories:["حياة يومية"], level:"سهل", questions:["اذكر قيمة تبدأ بحرف الألف.","اذكر قيمة تبدأ بحرف التاء.","اذكر قيمة تبدأ بحرف الشين.","اذكر قيمة تبدأ بحرف الصاد.","اذكر قيمة تبدأ بحرف الواو."], boardBanks:[{ cellId:"", label:"أ", questionBank:[{ question:"اذكر قيمة تبدأ بحرف الألف.", answer:"أمانة", category:"حياة يومية", difficulty:"easy", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ت", questionBank:[{ question:"اذكر قيمة تبدأ بحرف التاء.", answer:"تعاون", category:"حياة يومية", difficulty:"easy", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ش", questionBank:[{ question:"اذكر قيمة تبدأ بحرف الشين.", answer:"شجاعة", category:"حياة يومية", difficulty:"easy", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ص", questionBank:[{ question:"اذكر قيمة تبدأ بحرف الصاد.", answer:"صدق", category:"حياة يومية", difficulty:"easy", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"و", questionBank:[{ question:"اذكر قيمة تبدأ بحرف الواو.", answer:"وفاء", category:"حياة يومية", difficulty:"easy", points:1, hint:"", explanation:"" }] }] },
-  { id:"teen4", name:"تحدي اللغة العربية للمراهقين", categories:["لغة عربية"], level:"متوسط", questions:["اذكر كلمة تبدأ بحرف الباء وتدل على مصدر معرفي.","اذكر كلمة تبدأ بحرف الراء وتدل على طلب المعرفة.","اذكر كلمة تبدأ بحرف الضاد وترتبط بلغتنا.","اذكر كلمة تبدأ بحرف الميم وتدل على معنى.","اذكر كلمة تبدأ بحرف الياء وتدل على يقين."], boardBanks:[{ cellId:"", label:"ب", questionBank:[{ question:"اذكر كلمة تبدأ بحرف الباء وتدل على مصدر معرفي.", answer:"بحث", category:"لغة عربية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ر", questionBank:[{ question:"اذكر كلمة تبدأ بحرف الراء وتدل على طلب المعرفة.", answer:"رغبة", category:"لغة عربية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ض", questionBank:[{ question:"اذكر كلمة تبدأ بحرف الضاد وترتبط بلغتنا.", answer:"ضاد", category:"لغة عربية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"م", questionBank:[{ question:"اذكر كلمة تبدأ بحرف الميم وتدل على معنى.", answer:"مفهوم", category:"لغة عربية", difficulty:"medium", points:1, hint:"", explanation:"" }] },{ cellId:"", label:"ي", questionBank:[{ question:"اذكر كلمة تبدأ بحرف الياء وتدل على يقين.", answer:"يقين", category:"لغة عربية", difficulty:"medium", points:1, hint:"", explanation:"" }] }] },
+  createFullLetterTemplate("teen1", "تحدي الثقافة العامة", "ثقافة عامة", "متوسط"),
+  createFullLetterTemplate("teen2", "تحدي التقنية والذكاء الاصطناعي", "تقنية", "متوسط"),
+  createFullLetterTemplate("teen3", "تحدي القيم والحياة اليومية", "حياة يومية", "سهل"),
+  createFullLetterTemplate("teen4", "تحدي اللغة العربية للمراهقين", "لغة عربية", "متوسط"),
   { id:"t1", name:"قالب إسلاميات مبسط", categories:["إسلاميات"], level:"سهل", questions:["ما أول أركان الإسلام؟","ما اسم أول سورة في القرآن الكريم؟","ماذا نقول قبل قراءة القرآن؟","من هو خاتم الأنبياء؟","ما اسم الكتاب الذي أنزله الله على سيدنا محمد ﷺ؟","كم عدد الصلوات المفروضة في اليوم؟","ماذا نقول عند بداية الطعام؟","ما القبلة التي يتجه إليها المسلم في الصلاة؟","ما الشهر الذي يصوم فيه المسلمون؟","ما معنى الصدق؟"] },
   { id:"t2", name:"قالب لغة عربية للحروف", categories:["لغة عربية"], level:"سهل", questions:["اختر كلمة تبدأ بحرف الألف.","ما الحرف الأول في كلمة: باب؟","أكمل الكلمة بالحرف المناسب: _سد","اختر الكلمة المختلفة.","ما الحرف الأخير في كلمة: كتاب؟","أي كلمة تبدأ بحرف الميم؟","أكمل الكلمة: قـ_ر","ما الحرف الأول في كلمة: وردة؟","أي كلمة تحتوي على حرف السين؟","اختر كلمة تنتهي بحرف النون."] },
   { id:"t3", name:"قالب رياضيات سريع", categories:["رياضيات"], level:"متوسط", questions:["ما ناتج ٣ + ٤؟","اختر العدد الأكبر: ٨ أم ٥؟","إذا كان مع أحمد ٥ أقلام وأعطى صديقه ٢، كم بقي معه؟","أكمل النمط: ٢، ٤، ٦، __","ما ناتج ١٠ - ٣؟","أي عدد أصغر: ٦ أم ٩؟","ما ناتج ٢ × ٣؟","إذا كان لديك ٤ تفاحات وأضفت ٣، كم يصبح المجموع؟","أكمل: ٥، ١٠، ١٥، __","كم ضلعًا للمثلث؟"] },
@@ -539,6 +562,7 @@ export default function HostView() {
     if (!ok) return;
     try {
       let skipped = 0;
+      let missingLetters = 0;
       const nextBoard = room.board.map((cell) => {
         const found = tpl.boardBanks?.find(b=>b.cellId===cell.id || b.label===cell.label);
         const sourceBank = Array.isArray(found?.questionBank) ? found!.questionBank : [];
@@ -576,6 +600,7 @@ export default function HostView() {
             } as any);
           }
         }
+        if (!bank.length) missingLetters += 1;
         const first = bank[0];
         return {
           ...cell,
@@ -590,7 +615,8 @@ export default function HostView() {
       });
       await push({ board: nextBoard });
       if (skipped > 0) showToast.warning("تم تجاهل بعض الأسئلة لأنها لا تطابق الحروف المحددة.");
-      showToast.success("تم تحميل القالب وتوزيع الأسئلة على الحروف.");
+      showToast.success("تم تحميل القالب وتوزيع الأسئلة على جميع الحروف.");
+      if (missingLetters > 0) showToast.info("تم تحميل القالب، لكن بعض الحروف لا تحتوي على أسئلة.");
     } catch {
       showToast.error("تعذر تحميل القالب. يرجى المحاولة مرة أخرى.");
     }
@@ -898,13 +924,20 @@ export default function HostView() {
                 </select>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.75rem" }}>
-                {[...STARTER_TEMPLATES, ...communityTemplates].filter(tpl=>!templateSearch || tpl.name.includes(templateSearch)).filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory)).filter(tpl=>!templateLevel || tpl.level===templateLevel).map(tpl => (
+                {[...STARTER_TEMPLATES, ...communityTemplates].filter(tpl=>!templateSearch || tpl.name.includes(templateSearch)).filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory)).filter(tpl=>!templateLevel || tpl.level===templateLevel).map(tpl => {
+                  const totalQ = tpl.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || tpl.questions.length;
+                  const covered = tpl.boardBanks?.filter(b=>b.questionBank?.length).length || 0;
+                  const avg = covered ? (totalQ / covered).toFixed(1) : "0";
+                  return (
                   <div key={tpl.id} style={{ background:"#141e2d", border:"1.5px solid #1a2332", borderRadius:"14px", padding:"0.85rem" }}>
                     <div style={{ fontWeight:800, color:"#f0ede8", marginBottom:"0.35rem" }}>{tpl.name}</div>
                     <div style={{ fontSize:"0.74rem", color:"#94a3b8", lineHeight:1.8 }}>
                       <div>التصنيف: {tpl.categories.join("، ")}</div>
                       <div>المستوى: {tpl.level}</div>
-                      <div>{tpl.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || tpl.questions.length} أسئلة</div>
+                      <div>الحروف المغطاة: {covered}</div>
+                      <div>إجمالي الأسئلة: {totalQ}</div>
+                      <div>المتوسط: {avg} أسئلة لكل حرف</div>
+                      {covered < ARABIC_LETTERS_FULL.length && <div style={{ color:"#f59e0b" }}>هذا القالب لا يغطي جميع الحروف.</div>}
                       {tpl.createdAt && <div>تاريخ الحفظ: {new Date(tpl.createdAt).toLocaleDateString("ar")}</div>}
                     </div>
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginTop:"0.7rem" }}>
@@ -915,7 +948,7 @@ export default function HostView() {
                       {tpl.userCreated && <button className="btn-danger" style={{ fontSize:"0.75rem" }} onClick={()=>deleteTemplate(tpl)}>حذف القالب</button>}
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
           </div>
