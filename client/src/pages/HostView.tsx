@@ -365,14 +365,39 @@ export default function HostView() {
   };
   const nextQuestion = async () => {
     if (!room) return;
-    await push({ activeQuestion:null, selectedCellId:"", answerVisibleToHost:false,
-      answerVisibleToParticipants:false, hintVisibleToParticipants:false,
-      questionStatus:"idle", timerRunning:false });
+    const cell = room.board.find(c=>c.id===room.activeQuestion?.cellId);
+    const bank = cell ? (Array.isArray((cell as any).questionBank) && (cell as any).questionBank.length ? (cell as any).questionBank : (cell.question ? [{ question:cell.question, answer:cell.answer, category:cell.category, difficulty:cell.difficulty, points:cell.points, hint:cell.hint, explanation:cell.explanation }] : [])) : [];
+    if (room.activeQuestion && bank.length > 1) {
+      const idx = Math.max(0, bank.findIndex((q:any)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
+      const next = bank[idx+1];
+      if (next) {
+        await push({
+          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "" },
+          answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
+          questionStatus:"active", timerRunning:false, timerValue: room.timerSetting,
+        });
+        return;
+      }
+    }
+    await push({ activeQuestion:null, selectedCellId:"", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false, questionStatus:"idle", timerRunning:false });
   };
   const skipQ = async () => {
     if (!room) return;
-    await push({ activeQuestion:null, selectedCellId:"", questionStatus:"skipped",
-      answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
+    const cell = room.board.find(c=>c.id===room.activeQuestion?.cellId);
+    const bank = cell ? (Array.isArray((cell as any).questionBank) && (cell as any).questionBank.length ? (cell as any).questionBank : (cell.question ? [{ question:cell.question, answer:cell.answer, category:cell.category, difficulty:cell.difficulty, points:cell.points, hint:cell.hint, explanation:cell.explanation }] : [])) : [];
+    if (room.activeQuestion && bank.length > 1) {
+      const idx = Math.max(0, bank.findIndex((q:any)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
+      const next = bank[idx+1];
+      if (next) {
+        await push({
+          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "" },
+          answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
+          questionStatus:"skipped", timerRunning:false, timerValue: room.timerSetting,
+        });
+        return;
+      }
+    }
+    await push({ activeQuestion:null, selectedCellId:"", questionStatus:"skipped", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
   };
 
   const startTimer = () => push({ timerRunning:true });
