@@ -657,6 +657,70 @@ export default function HostView() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href=url; a.download=`template-${tpl.name}.json`; a.click(); URL.revokeObjectURL(url);
   };
+  const exportTemplateCsv = (tpl: StarterTemplate) => {
+    const rows: string[] = [];
+    rows.push(["اسم القالب","رقم السؤال","الحرف","السؤال","الإجابة الصحيحة","التصنيف","المستوى"].join(","));
+    (tpl.boardBanks || []).forEach((b) => {
+      (b.questionBank || []).forEach((q:any, idx:number) => {
+        const level = q.difficulty === "easy" ? "سهل" : q.difficulty === "hard" ? "صعب" : "متوسط";
+        const esc = (v:string) => `"${String(v || "").replace(/"/g,'""')}"`;
+        rows.push([esc(tpl.name), String(idx + 1), esc(b.label), esc(q.question), esc(q.answer), esc(q.category || "غير مصنف"), esc(level)].join(","));
+      });
+    });
+    const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `template-${tpl.name}.csv`; a.click(); URL.revokeObjectURL(url);
+  };
+  const importTemplateCsv = () => {
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".csv,text/csv";
+    input.onchange = async e => {
+      try {
+        if (!room) return;
+        const ok = window.confirm("سيتم استبدال مجموعة الأسئلة الحالية بالملف المستورد. هل تريد المتابعة؟");
+        if (!ok) return;
+        const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return;
+        const text = (await file.text()).replace(/^\uFEFF/, "");
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        if (lines.length < 2) throw new Error();
+        const parse = (line:string) => (line.match(/("([^"]|"")*"|[^,]+)/g) || []).map(x => x.replace(/^"|"$/g, "").replace(/""/g, "\"").trim());
+        const banks = new Map<string, any[]>();
+        let skipped = 0;
+        lines.slice(1).forEach((line) => {
+          const cols = parse(line);
+          const letter = cols[2] || "";
+          const question = cols[3] || "";
+          const answer = cols[4] || "";
+          if (!letter || !question || !answer) { skipped += 1; return; }
+          const normLetter = normalizeArabicLetter(letter);
+          const normAnswer = normalizeArabicLetter(answer);
+          if (normLetter !== normAnswer) skipped += 1;
+          if (!banks.has(letter)) banks.set(letter, []);
+          banks.get(letter)!.push({
+            letter,
+            question,
+            answer,
+            category: cols[5] || "غير مصنف",
+            difficulty: cols[6] === "سهل" ? "easy" : cols[6] === "صعب" ? "hard" : "medium",
+            points: 1,
+            hint: "",
+            explanation: "",
+          });
+        });
+        if (!banks.size) throw new Error();
+        const nextBoard = room.board.map((cell) => {
+          const bank = banks.get(cell.label) || [];
+          const first = bank[0];
+          return { ...cell, question: first?.question || "", answer: first?.answer || "", category: first?.category || "", difficulty: (first?.difficulty || "medium") as BoardCell["difficulty"], ...( { questionBank: bank } as any) };
+        });
+        await push({ board: nextBoard });
+        if (skipped > 0) showToast.warning("تم تجاهل بعض الصفوف بسبب عدم تطابق الحرف مع الإجابة.");
+        showToast.success("تم استيراد الجدول بنجاح.");
+      } catch {
+        showToast.error("تعذر استيراد الجدول. تأكد من تنسيق الملف.");
+      }
+    };
+    input.click();
+  };
   const importTemplate = () => {
     const input = document.createElement("input"); input.type="file"; input.accept=".json";
     input.onchange = async e => {
@@ -912,11 +976,14 @@ export default function HostView() {
               <div className="section-title">قوالب المجتمع</div>
               <div style={{ fontSize:"0.82rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
                 احفظ بنك الأسئلة الحالي كقالب، أو استخدم قالبًا جاهزًا/محفوظًا.
+                <div style={{ marginTop:"0.35rem" }}>يمكنك تعديل القالب في Excel ثم استيراده مرة أخرى.</div>
+                <div>يمكنك مشاركة القوالب مع الآخرين عن طريق تصديرها كجدول Excel.</div>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="اسم القالب" value={templateName} onChange={e=>setTemplateName(e.target.value)} />
                 <button className="btn-gold" onClick={saveCurrentAsTemplate}>حفظ كقالب</button>
                 <button className="btn-secondary" onClick={importTemplate}>استيراد قالب</button>
+                <button className="btn-secondary" onClick={importTemplateCsv}>استيراد من جدول</button>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="ابحث عن قالب..." value={templateSearch} onChange={e=>setTemplateSearch(e.target.value)} />
@@ -949,6 +1016,7 @@ export default function HostView() {
                       <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدام القالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>نسخ القالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير القالب</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplateCsv(tpl)}>تصدير كجدول</button>
                       {tpl.userCreated && <button className="btn-danger" style={{ fontSize:"0.75rem" }} onClick={()=>deleteTemplate(tpl)}>حذف القالب</button>}
                     </div>
                   </div>
@@ -1165,11 +1233,32 @@ function SettingsTab({ room, push, roomCode }: { room: RoomState; push: (u: Part
 function TeamsSettings({ room, push }: { room: RoomState; push: (u: Partial<RoomState>)=>Promise<void> }) {
   const [t1, setT1] = useState({ ...room.team1 });
   const [t2, setT2] = useState({ ...room.team2 });
+  const members = ((room as any).teamMembers || { "1": [], "2": [] }) as Record<string, Array<{ id:string; name:string; status:"present"|"absent"|"pending"; star?:boolean }>>;
+  const [newMember, setNewMember] = useState<{1:string;2:string}>({1:"",2:""});
   useEffect(()=>{ setT1({...room.team1}); setT2({...room.team2}); }, [room.team1, room.team2]);
+  const updateMembers = async (teamId: 1|2, updater: (arr: any[]) => any[]) => {
+    const next = { ...(room as any).teamMembers || { "1": [], "2": [] } };
+    next[String(teamId)] = updater([...(next[String(teamId)] || [])]);
+    await push({ ...( { teamMembers: next } as any) });
+  };
+  const addMember = async (teamId: 1|2) => {
+    const name = newMember[teamId].trim();
+    if (!name) return;
+    await updateMembers(teamId, (arr) => [...arr, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, name, status: "pending", star: false }]);
+    setNewMember(prev => ({ ...prev, [teamId]: "" }));
+  };
+  const setMemberStatus = async (teamId: 1|2, memberId: string, status: "present"|"absent"|"pending") => {
+    await updateMembers(teamId, (arr) => arr.map((m) => m.id === memberId ? { ...m, status } : m));
+  };
+  const setStar = async (teamId: 1|2, memberId: string) => {
+    await updateMembers(teamId, (arr) => arr.map((m) => ({ ...m, star: m.id === memberId ? !m.star : false })));
+    showToast.success("تم اختيار نجم الفريق");
+  };
+  const removeMember = async (teamId: 1|2, memberId: string) => updateMembers(teamId, (arr) => arr.filter((m) => m.id !== memberId));
   return (
     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1.25rem" }}>
       {[{ label:"الفريق الأول", t:t1, setT:setT1, key:"team1" as const },
-        { label:"الفريق الثاني", t:t2, setT:setT2, key:"team2" as const }].map(({ label, t, setT, key })=>(
+        { label:"الفريق الثاني", t:t2, setT:setT2, key:"team2" as const }].map(({ label, t, setT, key }, idx)=>(
         <div key={key} className="kc-card">
           <div className="section-title">{label}</div>
           <div style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
@@ -1177,6 +1266,32 @@ function TeamsSettings({ room, push }: { room: RoomState; push: (u: Partial<Room
             <div><label style={lbl2}>الأحرف الأولى</label><input value={t.initials} onChange={e=>setT({...t,initials:e.target.value})} maxLength={3} className="kc-input" /></div>
             <div><label style={lbl2}>لون الفريق</label><ColorPicker value={t.color} onChange={c=>setT({...t,color:c})} /></div>
             <button className="btn-gold" onClick={()=>push({ [key]:t })}>حفظ الفريق</button>
+            <div style={{ marginTop:"0.5rem", borderTop:"1px solid #1a2332", paddingTop:"0.75rem" }}>
+              <div style={{ fontWeight:700, color:"#f59e0b", marginBottom:"0.35rem" }}>أعضاء الفريق</div>
+              <div style={{ fontSize:"0.75rem", color:"#94a3b8", marginBottom:"0.45rem" }}>
+                الحضور: {(members[String(idx+1)] || []).filter(m=>m.status==="present").length} / {(members[String(idx+1)] || []).length}
+              </div>
+              <div style={{ display:"flex", gap:"0.35rem", marginBottom:"0.45rem" }}>
+                <input className="kc-input" placeholder="اسم العضو" value={newMember[(idx+1) as 1|2]} onChange={e=>setNewMember(prev=>({ ...prev, [idx+1]: e.target.value }))} />
+                <button className="btn-secondary" onClick={()=>addMember((idx+1) as 1|2)}>إضافة عضو</button>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:"0.4rem" }}>
+                {(members[String(idx+1)] || []).map((m)=>(
+                  <div key={m.id} style={{ background:"#141e2d", border:"1px solid #1a2332", borderRadius:"8px", padding:"0.45rem" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:"0.35rem", alignItems:"center" }}>
+                      <div style={{ fontSize:"0.82rem", color:"#f0ede8", fontWeight:700 }}>{m.name} {m.star ? "⭐" : ""}</div>
+                      <div style={{ fontSize:"0.72rem", color:m.status==="present"?"#22c55e":m.status==="absent"?"#ef4444":"#94a3b8" }}>{m.status==="present"?"حاضر":m.status==="absent"?"غائب":"بانتظار التأكيد"}</div>
+                    </div>
+                    <div style={{ display:"flex", gap:"0.3rem", marginTop:"0.35rem", flexWrap:"wrap" }}>
+                      <button className="btn-secondary" style={{ fontSize:"0.7rem" }} onClick={()=>setMemberStatus((idx+1) as 1|2, m.id, "present")}>تأكيد الحضور</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.7rem" }} onClick={()=>setMemberStatus((idx+1) as 1|2, m.id, "absent")}>غائب</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.7rem" }} onClick={()=>setStar((idx+1) as 1|2, m.id)}>{m.star ? "إلغاء نجم الفريق" : "اختيار نجم الفريق"}</button>
+                      <button className="btn-danger" style={{ fontSize:"0.7rem" }} onClick={()=>removeMember((idx+1) as 1|2, m.id)}>إزالة العضو</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       ))}
