@@ -111,6 +111,24 @@ function CellEditor({ cell, onSave, onClose }: {
 }
 const lbl: React.CSSProperties = { display:"block", fontSize:"0.8rem", fontWeight:600, color:"#94a3b8", marginBottom:"0.35rem" };
 
+type StarterTemplate = {
+  id: string;
+  name: string;
+  categories: string[];
+  level: "سهل" | "متوسط" | "صعب";
+  questions: string[];
+};
+const COMMUNITY_TEMPLATES_KEY = "knowledgeConnectCommunityTemplates";
+const STARTER_TEMPLATES: StarterTemplate[] = [
+  { id:"t1", name:"قالب إسلاميات مبسط", categories:["إسلاميات"], level:"سهل", questions:["ما أول أركان الإسلام؟","ما اسم أول سورة في القرآن الكريم؟","ماذا نقول قبل قراءة القرآن؟","من هو خاتم الأنبياء؟","ما اسم الكتاب الذي أنزله الله على سيدنا محمد ﷺ؟","كم عدد الصلوات المفروضة في اليوم؟","ماذا نقول عند بداية الطعام؟","ما القبلة التي يتجه إليها المسلم في الصلاة؟","ما الشهر الذي يصوم فيه المسلمون؟","ما معنى الصدق؟"] },
+  { id:"t2", name:"قالب لغة عربية للحروف", categories:["لغة عربية"], level:"سهل", questions:["اختر كلمة تبدأ بحرف الألف.","ما الحرف الأول في كلمة: باب؟","أكمل الكلمة بالحرف المناسب: _سد","اختر الكلمة المختلفة.","ما الحرف الأخير في كلمة: كتاب؟","أي كلمة تبدأ بحرف الميم؟","أكمل الكلمة: قـ_ر","ما الحرف الأول في كلمة: وردة؟","أي كلمة تحتوي على حرف السين؟","اختر كلمة تنتهي بحرف النون."] },
+  { id:"t3", name:"قالب رياضيات سريع", categories:["رياضيات"], level:"متوسط", questions:["ما ناتج ٣ + ٤؟","اختر العدد الأكبر: ٨ أم ٥؟","إذا كان مع أحمد ٥ أقلام وأعطى صديقه ٢، كم بقي معه؟","أكمل النمط: ٢، ٤، ٦، __","ما ناتج ١٠ - ٣؟","أي عدد أصغر: ٦ أم ٩؟","ما ناتج ٢ × ٣؟","إذا كان لديك ٤ تفاحات وأضفت ٣، كم يصبح المجموع؟","أكمل: ٥، ١٠، ١٥، __","كم ضلعًا للمثلث؟"] },
+  { id:"t4", name:"قالب معرفة عامة", categories:["معرفة عامة"], level:"سهل", questions:["كم يومًا في الأسبوع؟","ما لون السماء في النهار؟","ما الحيوان الذي يلقب بملك الغابة؟","ما الشيء الذي نستخدمه للكتابة؟","كم شهرًا في السنة؟","ما الكوكب الذي نعيش عليه؟","ما الحيوان الذي يعطينا الحليب؟","ما وسيلة النقل التي تطير في السماء؟","ما العضو الذي نستخدمه للرؤية؟","ماذا نستخدم لقياس الوقت؟"] },
+  { id:"t5", name:"قالب مفردات", categories:["مفردات"], level:"متوسط", questions:["ما ضد كلمة \"كبير\"؟","ما مرادف كلمة \"سعيد\"؟","ما معنى كلمة \"أمانة\"؟","اختر ضد كلمة \"سريع\".","اختر مرادف كلمة \"جميل\".","ما ضد كلمة \"قريب\"؟","اختر الكلمة التي تدل على النظافة.","ما مرادف كلمة \"منزل\"؟","ما ضد كلمة \"ليل\"؟","اختر الكلمة المناسبة: طالب ____ الدرس."] },
+  { id:"t6", name:"قالب قراءة وفهم", categories:["قراءة وفهم"], level:"متوسط", questions:["اقرأ: \"ذهب سالم إلى المدرسة صباحًا.\" أين ذهب سالم؟","اقرأ: \"شربت مريم الحليب.\" ماذا شربت مريم؟","اقرأ: \"جلس الطفل تحت الشجرة.\" أين جلس الطفل؟","اقرأ: \"اشترى خالد كتابًا جديدًا.\" ماذا اشترى خالد؟","اقرأ: \"ساعدت فاطمة أمها في البيت.\" من ساعدت فاطمة؟","اقرأ: \"طار العصفور فوق الشجرة.\" أين طار العصفور؟","اقرأ: \"زرع علي وردة في الحديقة.\" ماذا زرع علي؟","اقرأ: \"قرأ الطالب القصة بهدوء.\" ماذا قرأ الطالب؟","اقرأ: \"لعب الأطفال في الحديقة.\" أين لعب الأطفال؟","اقرأ: \"أكلت القطة السمكة.\" ماذا أكلت القطة؟"] },
+  { id:"t7", name:"قالب مراجعة شاملة", categories:["إسلاميات","لغة عربية","رياضيات","معرفة عامة"], level:"متوسط", questions:["ما أول أركان الإسلام؟","اختر كلمة تبدأ بحرف الألف.","ما ناتج ٣ + ٤؟","كم يومًا في الأسبوع؟","ما الحرف الأول في كلمة: باب؟","ما ناتج ١٠ - ٣؟","ما الشهر الذي يصوم فيه المسلمون؟","ما لون السماء في النهار؟","أكمل النمط: ٢، ٤، ٦، __","ما القبلة التي يتجه إليها المسلم في الصلاة؟"] },
+];
+
 // ── Color presets ─────────────────────────────────────────────
 const COLOR_PRESETS = [
   "#16a34a","#22c55e","#15803d","#166534",
@@ -157,11 +175,23 @@ export default function HostView() {
   const [editingCell, setEditingCell] = useState<BoardCell | null>(null);
   const [confirmMsg, setConfirmMsg] = useState("");
   const [confirmAction, setConfirmAction] = useState<(()=>void)|null>(null);
+  const [previewTemplate, setPreviewTemplate] = useState<StarterTemplate | null>(null);
+  const [communityTemplates, setCommunityTemplates] = useState<StarterTemplate[]>([]);
   const unsubRef = useRef<(()=>void)|null>(null);
   const roomRef = useRef<RoomState|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COMMUNITY_TEMPLATES_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) setCommunityTemplates(parsed);
+    } catch {
+      showToast.warning("تعذر قراءة قوالب المجتمع المحفوظة.");
+    }
+  }, []);
 
   // Load last room
   useEffect(() => {
@@ -382,6 +412,41 @@ export default function HostView() {
     input.click();
   };
 
+  const duplicateTemplate = (tpl: StarterTemplate) => {
+    try {
+      const copy: StarterTemplate = {
+        ...tpl,
+        id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: `نسخة من ${tpl.name}`,
+      };
+      const next = [copy, ...communityTemplates];
+      setCommunityTemplates(next);
+      localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
+      showToast.success("تم نسخ القالب بنجاح.");
+    } catch {
+      showToast.error("تعذر نسخ القالب. يرجى المحاولة مرة أخرى.");
+    }
+  };
+
+  const useTemplate = async (tpl: StarterTemplate) => {
+    if (!room) return;
+    const ok = window.confirm("سيتم استبدال مجموعة الأسئلة الحالية بهذا القالب. هل تريد المتابعة؟");
+    if (!ok) return;
+    try {
+      const nextBoard = room.board.map((cell, idx) => ({
+        ...cell,
+        question: tpl.questions[idx % tpl.questions.length] || "",
+        answer: "",
+        category: tpl.categories[0] || "",
+        difficulty: (tpl.level === "سهل" ? "easy" : tpl.level === "متوسط" ? "medium" : "hard") as BoardCell["difficulty"],
+      }));
+      await push({ board: nextBoard });
+      showToast.success("تم تحميل القالب.");
+    } catch {
+      showToast.error("تعذر تحميل القالب. يرجى المحاولة مرة أخرى.");
+    }
+  };
+
   // ── Firebase not configured ──
   if (!isFirebaseConfigured()) {
     return (
@@ -440,6 +505,23 @@ export default function HostView() {
           onNo={() => { setConfirmMsg(""); setConfirmAction(null); }} />
       )}
       {editingCell && <CellEditor cell={editingCell} onSave={saveCellQ} onClose={()=>setEditingCell(null)} />}
+      {previewTemplate && (
+        <div className="modal-overlay" onClick={()=>setPreviewTemplate(null)}>
+          <div className="modal-box" style={{ maxWidth: 560 }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontWeight:800, color:"#f59e0b", marginBottom:"0.45rem" }}>معاينة</div>
+            <div style={{ fontWeight:700, color:"#f0ede8", marginBottom:"0.35rem" }}>{previewTemplate.name}</div>
+            <div style={{ fontSize:"0.8rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
+              التصنيف: {previewTemplate.categories.join("، ")} • المستوى: {previewTemplate.level} • عدد الأسئلة: {previewTemplate.questions.length}
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:"0.35rem", marginBottom:"0.8rem" }}>
+              {previewTemplate.questions.slice(0,5).map((q, i)=>(
+                <div key={i} style={{ fontSize:"0.86rem", color:"#f0ede8" }}>• {q}</div>
+              ))}
+            </div>
+            <button className="btn-secondary" onClick={()=>setPreviewTemplate(null)}>إغلاق المعاينة</button>
+          </div>
+        </div>
+      )}
 
       {/* Winner overlay */}
       {room.winnerMessage && (
@@ -569,6 +651,30 @@ export default function HostView() {
                         : <div style={{ fontSize:"0.85rem", color:"#3d5068" }}>هذا الحرف لا يحتوي على سؤال بعد</div>}
                     </div>
                     <span style={{ fontSize:"0.75rem", color: cell.question ? "#22c55e" : "#ef4444" }}>{cell.question?"✓":"!"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="kc-card" style={{ gridColumn:"1 / -1" }}>
+              <div className="section-title">قوالب جاهزة</div>
+              <div style={{ fontSize:"0.82rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
+                اختر قالبًا جاهزًا، ثم عاينه أو استخدمه مباشرة لتعبئة أسئلة الحروف.
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.75rem" }}>
+                {[...STARTER_TEMPLATES, ...communityTemplates].map(tpl => (
+                  <div key={tpl.id} style={{ background:"#141e2d", border:"1.5px solid #1a2332", borderRadius:"14px", padding:"0.85rem" }}>
+                    <div style={{ fontWeight:800, color:"#f0ede8", marginBottom:"0.35rem" }}>اسم القالب: {tpl.name}</div>
+                    <div style={{ fontSize:"0.74rem", color:"#94a3b8", lineHeight:1.8 }}>
+                      <div>التصنيفات: {tpl.categories.join("، ")}</div>
+                      <div>المستوى: {tpl.level}</div>
+                      <div>عدد الأسئلة: {tpl.questions.length}</div>
+                    </div>
+                    <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginTop:"0.7rem" }}>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
+                      <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدام القالب</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>نسخ القالب</button>
+                    </div>
                   </div>
                 ))}
               </div>
