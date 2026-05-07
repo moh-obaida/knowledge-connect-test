@@ -13,6 +13,7 @@ import {
 } from "../lib/store";
 import HexBoard from "../components/HexBoard";
 import { showToast } from "../components/KcToast";
+import { normalizeQuestion, validateQuestion } from "../lib/questionTypes";
 
 // ── URL helpers ───────────────────────────────────────────────
 const BASE_URL = (import.meta.env.VITE_PUBLIC_APP_URL as string) || window.location.origin;
@@ -191,6 +192,22 @@ const ARABIC_LETTER_NORMALIZE: Record<string, string> = { "أ":"ا", "إ":"ا", 
 const normalizeArabicLetter = (value?: string) => {
   const ch = (value || "").trim().charAt(0);
   return ARABIC_LETTER_NORMALIZE[ch] || ch;
+};
+const normalizeTemplateQuestion = (q: any, fallbackLetter: string, fallbackCategory = "غير مصنف") => {
+  const n = normalizeQuestion({ ...q, question: q?.question ?? q?.prompt, answer: q?.answer ?? q?.correctAnswer, letter: q?.letter || fallbackLetter, category: q?.category || fallbackCategory });
+  return {
+    type: n.type,
+    question: n.prompt,
+    answer: n.correctAnswer,
+    choices: n.choices || [],
+    category: n.category || fallbackCategory,
+    difficulty: n.difficulty || "medium",
+    points: Number((q as any)?.points) || 1,
+    hint: String((q as any)?.hint || ""),
+    explanation: n.explanation || "",
+    letter: n.letter || fallbackLetter,
+    imageUrl: n.imageUrl || "",
+  };
 };
 const questionInitialLetter = (item: Partial<TemplateQuestionItem>) => {
   if (item.letter) return normalizeArabicLetter(item.letter);
@@ -606,16 +623,7 @@ export default function HostView() {
           const ok = letterFromData === target;
           if (!ok) skipped += 1;
           return ok;
-        }).map((q:any)=>({
-          question: String(q.question || "").trim(),
-          answer: String(q.answer || "").trim(),
-          category: String(q.category || tpl.categories[0] || "غير مصنف"),
-          difficulty: (q.difficulty === "easy" || q.difficulty === "medium" || q.difficulty === "hard") ? q.difficulty : (tpl.level === "سهل" ? "easy" : tpl.level === "صعب" ? "hard" : "medium"),
-          points: Number(q.points) || 1,
-          hint: String(q.hint || ""),
-          explanation: String(q.explanation || ""),
-          letter: String(q.letter || cell.label),
-        }));
+        }).map((q:any)=>normalizeTemplateQuestion(q, cell.label, tpl.categories[0] || "غير مصنف"));
         const bank = filtered.length ? filtered : [];
         // توافق خلفي للقوالب القديمة (سؤال واحد لكل خانة)
         if (!bank.length && !tpl.boardBanks?.length && Array.isArray(tpl.questions) && tpl.questions.length) {
@@ -660,7 +668,10 @@ export default function HostView() {
     const withQ = room.board.filter(c=>c.question.trim() || (Array.isArray((c as any).questionBank) && (c as any).questionBank.length));
     if (!withQ.length) { showToast.warning("أضف سؤالًا واحدًا على الأقل قبل حفظ القالب."); return; }
     const boardBanks = room.board.map(c=>{
-      const bank = Array.isArray((c as any).questionBank) && (c as any).questionBank.length ? (c as any).questionBank : (c.question ? [{ question:c.question, answer:c.answer, category:c.category||"غير مصنف", difficulty:c.difficulty, points:c.points||1, hint:c.hint||"", explanation:c.explanation||"", letter:c.label }] : []);
+      const bank = (Array.isArray((c as any).questionBank) && (c as any).questionBank.length ? (c as any).questionBank : (c.question ? [{ question:c.question, answer:c.answer, category:c.category||"غير مصنف", difficulty:c.difficulty, points:c.points||1, hint:c.hint||"", explanation:c.explanation||"", letter:c.label }] : []))
+        .map((q:any)=>normalizeTemplateQuestion(q, c.label, c.category || "غير مصنف"));
+      const invalid = bank.map((q:any)=>validateQuestion(normalizeQuestion({ question:q.question, answer:q.answer, type:q.type, choices:q.choices, letter:q.letter, imageUrl:q.imageUrl }))).filter((x:any)=>!x.valid);
+      if (invalid.length) showToast.warning("Question text is required.");
       return { cellId:c.id, label:c.label, questionBank: bank };
     });
     const totalQuestions = boardBanks.reduce((n,b)=>n+b.questionBank.length,0);
@@ -760,17 +771,8 @@ export default function HostView() {
         const safeBanks = Array.isArray(parsed.boardBanks) ? parsed.boardBanks.map((b:any)=>({
           cellId: String(b?.cellId || ""),
           label: String(b?.label || ""),
-          questionBank: Array.isArray(b?.questionBank) ? b.questionBank.filter((q:any)=>q?.question).map((q:any)=>({
-            question: String(q.question || "").trim(),
-            answer: String(q.answer || "").trim(),
-            category: String(q.category || "غير مصنف"),
-            difficulty: (q.difficulty==="easy"||q.difficulty==="medium"||q.difficulty==="hard") ? q.difficulty : "medium",
-            points: Number(q.points) || 1,
-            hint: String(q.hint || ""),
-            explanation: String(q.explanation || ""),
-            letter: String(q.letter || b?.label || ""),
-          })) : [],
-        })) : [];
+            questionBank: Array.isArray(b?.questionBank) ? b.questionBank.map((q:any)=>normalizeTemplateQuestion(q, String(b?.label || ""), "غير مصنف")).filter((q:any)=>q.question && q.answer) : [],
+          })) : [];
         const tpl: StarterTemplate = { id:`u_${Date.now()}`, name:parsed.name, categories:Array.isArray(parsed.categories)?parsed.categories:["غير مصنف"], level:parsed.level==="سهل"||parsed.level==="متوسط"||parsed.level==="صعب"?parsed.level:"متوسط", questions:Array.isArray(parsed.questions)?parsed.questions:[], boardBanks:safeBanks, createdAt:new Date().toISOString(), userCreated:true };
         const next=[tpl, ...communityTemplates];
         setCommunityTemplates(next); localStorage.setItem(COMMUNITY_TEMPLATES_KEY, JSON.stringify(next));
@@ -855,10 +857,13 @@ export default function HostView() {
               </div>
             )}
             <div style={{ display:"flex", flexDirection:"column", gap:"0.35rem", marginBottom:"0.8rem" }}>
-              {(previewTemplate.boardBanks?.flatMap(b=>b.questionBank.map((q:any)=>q.question)) || previewTemplate.questions).slice(0,5).map((q, i)=>(
-                <div key={i} style={{ fontSize:"0.86rem", color:"#f0ede8" }}>• {q}</div>
+              {(previewTemplate.boardBanks?.flatMap(b=>b.questionBank.map((q:any)=>q)) || previewTemplate.questions.map((q:any)=>({ question:q, type:"fill" }))).slice(0,5).map((q:any, i)=>(
+                <div key={i} style={{ fontSize:"0.86rem", color:"#f0ede8" }}>• [{q.type || "fill"}] {q.question || q.prompt || "—"}</div>
               ))}
             </div>
+            {(previewTemplate.boardBanks?.flatMap(b=>b.questionBank||[]) || []).some((q:any)=>q.type==="image" && !q.imageUrl) && (
+              <div style={{ fontSize:"0.78rem", color:"#f59e0b", marginBottom:"0.6rem" }}>This image question has no image yet, so a placeholder will be shown.</div>
+            )}
             <button className="btn-secondary" onClick={()=>setPreviewTemplate(null)}>رجوع</button>
           </div>
         </div>
