@@ -445,6 +445,9 @@ export default function HostView() {
   };
   const pageGradient = getPageGradient(appearance);
 
+  useEffect(() => {
+    const last = loadLastRoomCode();
+    if (last) {
       setRoomCode(last);
 
       const unsub = subscribeToRoom(last, (s) => {
