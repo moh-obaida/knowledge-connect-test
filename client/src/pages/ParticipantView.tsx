@@ -93,6 +93,8 @@ export default function ParticipantView() {
         <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>⚙️</div>
         <div style={{ fontSize:"1.25rem", fontWeight:700, color:accent, marginBottom:"0.5rem" }}>تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا.</div>
         <div style={{ color:surface.muted, fontSize:"0.9rem", marginBottom:"1.5rem" }}>يرجى مراجعة إعدادات المشروع أو التواصل مع المسؤول.</div>
+        <div style={{ fontSize:"1.25rem", fontWeight:700, color:"#f59e0b", marginBottom:"0.5rem" }}>تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا.</div>
+        <div style={{ color:"#64748b", fontSize:"0.9rem", marginBottom:"1.5rem" }}>يرجى مراجعة إعدادات المشروع أو التواصل مع المسؤول.</div>
         <a href="/join" style={{ display:"inline-block", padding:"0.6rem 1.5rem", background:"#f59e0b", color:"#090d18", borderRadius:"10px", fontWeight:700, textDecoration:"none" }}>العودة</a>
       </div>
     </div>
@@ -140,6 +142,8 @@ export default function ParticipantView() {
           <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>⏳</div>
           <div style={{ fontSize:"1.2rem", fontWeight:700, color:surface.text, marginBottom:"0.5rem" }}>بانتظار بدء الجولة...</div>
           <div style={{ color:surface.muted, fontSize:"0.9rem", marginBottom:"1.5rem" }}>استعد! سيبدأ التحدي بعد قليل</div>
+          <div style={{ fontSize:"1.2rem", fontWeight:700, color:"#f0ede8", marginBottom:"0.5rem" }}>بانتظار بدء الجولة...</div>
+          <div style={{ color:"#64748b", fontSize:"0.9rem", marginBottom:"1.5rem" }}>استعد! سيبدأ التحدي بعد قليل</div>
           <div style={{ display:"flex", gap:"1rem", justifyContent:"center" }}>
             {[team1, team2].map((t, i) => (
               <div key={i} style={{ background:"#141e2d", borderRadius:"12px", padding:"0.75rem 1rem", textAlign:"center", minWidth:90 }}>
@@ -322,6 +326,8 @@ export default function ParticipantView() {
                 <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>⏳</div>
                 <div style={{ fontSize:"1.1rem", fontWeight:700, color:surface.text, marginBottom:"0.5rem" }}>بانتظار السؤال التالي...</div>
                 <div style={{ color:surface.muted, fontSize:"0.9rem" }}>يتم الآن اختيار الحرف التالي</div>
+                <div style={{ fontSize:"1.1rem", fontWeight:700, color:"#f0ede8", marginBottom:"0.5rem" }}>بانتظار السؤال التالي...</div>
+                <div style={{ color:"#64748b", fontSize:"0.9rem" }}>يتم الآن اختيار الحرف التالي</div>
               </div>
             )}
           </div>

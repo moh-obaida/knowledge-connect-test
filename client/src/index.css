@@ -100,6 +100,7 @@ html[data-theme="mid"] {
   }
   body {
     background: radial-gradient(circle at top, var(--bg-top) 0%, var(--bg-page) 45%);
+    background: radial-gradient(circle at top, #111a2b 0%, var(--background) 45%);
     color: var(--foreground);
     font-family: 'Cairo', sans-serif;
     direction: rtl;
