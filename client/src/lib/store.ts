@@ -23,6 +23,8 @@ export interface Team {
   initials: string;
 }
 
+export type QuestionTypeValue = "fill" | "mcq" | "tf";
+
 export interface ActiveQuestion {
   cellId: string;
   cellLabel: string;
@@ -33,6 +35,8 @@ export interface ActiveQuestion {
   points: number;
   hint: string;
   explanation: string;
+  type?: QuestionTypeValue;
+  choices?: string[];
 }
 
 export interface Player {

@@ -130,41 +130,63 @@ export default function ParticipantView() {
 
   // ── Lobby ──
   if (gameStatus === "lobby") {
+    const myPlayer = room.players?.[myPlayerId];
+    const teamName = myPlayer?.team === 1 ? room.team1.name : myPlayer?.team === 2 ? room.team2.name : null;
+    const teamColor = myPlayer?.team === 1 ? room.team1.color : myPlayer?.team === 2 ? room.team2.color : "#64748b";
+    const totalParticipants = Object.keys(room.players || {}).length;
     return (
-      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:bg, padding:"2rem" }}>
-        <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:surface.card, color:surface.muted, marginBottom:"1.5rem", fontWeight:600 }}>🏷 شاشة العرض</div>
-        <div style={{ fontSize:"3rem", fontWeight:900, color:accent, marginBottom:"0.5rem", textAlign:"center" }}>{gameTitle || "وصلة المعرفة"}</div>
-        {logoText && <div style={{ fontSize:"1.1rem", color:"#94a3b8", marginBottom:"0.5rem" }}>{logoText}</div>}
-        <div style={{ color:"#475569", marginBottom:"2rem", fontSize:"0.9rem" }}>
-          غرفة: <span style={{ color:accent, fontWeight:700, letterSpacing:"0.2em" }}>{roomCode}</span>
-        </div>
-        <div style={{ background:surface.card, border:`1.5px solid ${surface.border}`, borderRadius:"20px", padding:"2.5rem", textAlign:"center", maxWidth:380, width:"100%" }}>
-          <div style={{ fontSize:"3rem", marginBottom:"1rem" }}>⏳</div>
-          <div style={{ fontSize:"1.2rem", fontWeight:700, color:surface.text, marginBottom:"0.5rem" }}>بانتظار بدء الجولة...</div>
-          <div style={{ color:surface.muted, fontSize:"0.9rem", marginBottom:"1.5rem" }}>استعد! سيبدأ التحدي بعد قليل</div>
-          <div style={{ fontSize:"1.2rem", fontWeight:700, color:"#f0ede8", marginBottom:"0.5rem" }}>بانتظار بدء الجولة...</div>
-          <div style={{ color:"#64748b", fontSize:"0.9rem", marginBottom:"1.5rem" }}>استعد! سيبدأ التحدي بعد قليل</div>
-          <div style={{ display:"flex", gap:"1rem", justifyContent:"center" }}>
+      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:bg, padding:"1.5rem" }}>
+        <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:surface.card, color:surface.muted, marginBottom:"1.25rem", fontWeight:600 }}>🏷 صفحة المشارك</div>
+        <div style={{ fontSize:"clamp(2rem, 6vw, 3rem)", fontWeight:900, color:accent, marginBottom:"0.4rem", textAlign:"center" }}>{gameTitle || "وصلة المعرفة"}</div>
+        {logoText && <div style={{ fontSize:"1.05rem", color:surface.muted, marginBottom:"0.5rem" }}>{logoText}</div>}
+
+        <div style={{ background:surface.card, border:`1.5px solid ${surface.border}`, borderRadius:"22px", padding:"1.85rem 1.5rem", textAlign:"center", maxWidth:440, width:"100%", boxShadow:"0 16px 36px rgba(0,0,0,0.45)" }}>
+          <div style={{ display:"inline-block", padding:"0.35rem 0.85rem", borderRadius:9999, background:"rgba(34,197,94,0.15)", color:"#22c55e", fontWeight:700, fontSize:"0.78rem", marginBottom:"0.85rem" }}>✅ تم الانضمام بنجاح</div>
+          <div style={{ fontSize:"1.45rem", fontWeight:800, color:surface.text, marginBottom:"0.3rem" }}>بانتظار بدء التحدي من المضيف</div>
+          <div style={{ color:surface.muted, fontSize:"0.92rem", marginBottom:"1.4rem" }}>استعد، سيبدأ التحدي قريباً.</div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(105px, 1fr))", gap:"0.55rem", marginBottom:"1.2rem" }}>
+            <div style={{ background:"#141e2d", borderRadius:"12px", padding:"0.6rem 0.4rem" }}>
+              <div style={{ fontSize:"0.68rem", color:surface.muted, marginBottom:"0.25rem" }}>اسمك</div>
+              <div style={{ fontWeight:800, color:surface.text, fontSize:"0.95rem", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{playerName || "—"}</div>
+            </div>
+            <div style={{ background:"#141e2d", borderRadius:"12px", padding:"0.6rem 0.4rem" }}>
+              <div style={{ fontSize:"0.68rem", color:surface.muted, marginBottom:"0.25rem" }}>رمز الغرفة</div>
+              <div style={{ fontWeight:900, color:accent, fontSize:"1rem", letterSpacing:"0.18em" }}>{roomCode || "—"}</div>
+            </div>
+            <div style={{ background:"#141e2d", borderRadius:"12px", padding:"0.6rem 0.4rem" }}>
+              <div style={{ fontSize:"0.68rem", color:surface.muted, marginBottom:"0.25rem" }}>الفريق</div>
+              <div style={{ fontWeight:800, color: teamName ? teamColor : surface.muted, fontSize:"0.9rem" }}>
+                {teamName || "بانتظار التعيين"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ position:"relative", width:60, height:60, margin:"0 auto 0.85rem", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <div style={{ position:"absolute", inset:0, borderRadius:"50%", border:`3px solid ${accent}33`, borderTopColor:accent, animation:"spin 1.4s linear infinite" }} />
+            <div style={{ fontSize:"1.4rem" }}>⏳</div>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          </div>
+
+          <div style={{ fontSize:"0.78rem", color:surface.muted }}>
+            {totalParticipants > 0 ? `إجمالي المشاركين الحاليين: ${totalParticipants}` : "أنت أول من ينضم — انتظر بقية الفريق"}
+          </div>
+
+          <div style={{ marginTop:"1.1rem", padding:"0.7rem 0.85rem", background:"#141e2d", border:"1px solid #1a2332", borderRadius:12, color:"#cbd5e1", fontSize:"0.8rem", lineHeight:1.9, textAlign:"right" }}>
+            <div style={{ fontWeight:700, color:accent, marginBottom:"0.25rem" }}>تعليمات سريعة</div>
+            <div>• ابقِ هذه الصفحة مفتوحة حتى يبدأ المضيف التحدي.</div>
+            <div>• ستظهر اللوحة والأسئلة تلقائياً عند البدء.</div>
+            <div>• يمكنك الانضمام إلى فريق إذا لم تكن مُعيَّناً بعد.</div>
+          </div>
+
+          <div style={{ display:"flex", gap:"1rem", justifyContent:"center", marginTop:"1.1rem" }}>
             {[team1, team2].map((t, i) => (
-              <div key={i} style={{ background:"#141e2d", borderRadius:"12px", padding:"0.75rem 1rem", textAlign:"center", minWidth:90 }}>
-                <div style={{ fontSize:"0.7rem", color:surface.muted, marginBottom:"0.25rem" }}>الفريق {i+1}</div>
-                <div style={{ fontWeight:700, fontSize:"0.85rem", color:t.color }}>{t.name}</div>
+              <div key={i} style={{ background:"#0f1623", borderRadius:"12px", padding:"0.55rem 0.85rem", textAlign:"center", minWidth:96, border: myPlayer?.team === i+1 ? `1.5px solid ${t.color}` : "1px solid #1a2332" }}>
+                <div style={{ fontSize:"0.68rem", color:surface.muted, marginBottom:"0.2rem" }}>الفريق {i+1}</div>
+                <div style={{ fontWeight:700, fontSize:"0.82rem", color:t.color }}>{t.name}</div>
               </div>
             ))}
           </div>
-          {playerName && (() => {
-          const myPlayer = room.players?.[myPlayerId];
-          const teamName = myPlayer?.team === 1 ? room.team1.name : myPlayer?.team === 2 ? room.team2.name : null;
-          const teamColor = myPlayer?.team === 1 ? room.team1.color : myPlayer?.team === 2 ? room.team2.color : "#64748b";
-          return (
-            <div style={{ marginTop:"1.25rem", textAlign:"center" }}>
-              <div style={{ fontSize:"0.9rem", color:surface.text, fontWeight:600 }}>مرحبًا، {playerName}</div>
-              {teamName
-                ? <div style={{ fontSize:"0.8rem", color:teamColor, fontWeight:700, marginTop:"0.2rem" }}>فريقك: {teamName}</div>
-                : <div style={{ fontSize:"0.78rem", color:"#475569", marginTop:"0.2rem" }}>لم يتم تعيينك في فريق بعد.</div>}
-            </div>
-          );
-        })()}
         </div>
       </div>
     );
@@ -296,9 +318,37 @@ export default function ParticipantView() {
                   </span>
                 </div>
 
-                <div style={{ fontSize:"1.3rem", fontWeight:700, color:surface.text, lineHeight:1.7, marginBottom:"1rem", direction:"rtl" }}>
+                <div style={{ fontSize:"1.3rem", fontWeight:700, color:surface.text, lineHeight:1.7, marginBottom:"0.85rem", direction:"rtl" }}>
                   {activeQuestion.question}
                 </div>
+
+                {(activeQuestion as any).type === "mcq" && Array.isArray((activeQuestion as any).choices) && (activeQuestion as any).choices.length > 0 && (
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:"0.45rem", marginBottom:"0.8rem" }}>
+                    {((activeQuestion as any).choices as string[]).map((c, i) => {
+                      const isCorrect = answerVisibleToParticipants && c === activeQuestion.answer;
+                      return (
+                        <div key={i} style={{ display:"flex", alignItems:"center", gap:"0.4rem", padding:"0.55rem 0.7rem", borderRadius:12, background: isCorrect ? "rgba(34,197,94,0.15)" : "#141e2d", border: `1.5px solid ${isCorrect ? "rgba(34,197,94,0.45)" : "#1a2332"}`, color: isCorrect ? "#22c55e" : surface.text, fontWeight:700, fontSize:"1rem" }}>
+                          <span style={{ fontSize:"0.78rem", color:isCorrect ? "#22c55e" : surface.muted, fontWeight:700, minWidth:18 }}>{String.fromCharCode(65 + i)}.</span>
+                          <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis" }}>{c}</span>
+                          {isCorrect && <span>✓</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {(activeQuestion as any).type === "tf" && (
+                  <div style={{ display:"flex", gap:"0.5rem", marginBottom:"0.8rem" }}>
+                    {["صحيح","خطأ"].map((c) => {
+                      const isCorrect = answerVisibleToParticipants && c === activeQuestion.answer;
+                      return (
+                        <div key={c} style={{ flex:1, textAlign:"center", padding:"0.65rem", borderRadius:12, background: isCorrect ? "rgba(34,197,94,0.15)" : "#141e2d", border: `1.5px solid ${isCorrect ? "rgba(34,197,94,0.45)" : "#1a2332"}`, color: isCorrect ? "#22c55e" : surface.text, fontWeight:800, fontSize:"1.05rem" }}>
+                          {c}{isCorrect ? " ✓" : ""}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {hintVisibleToParticipants && activeQuestion.hint && (
                   <div style={{ borderRadius:"12px", padding:"0.65rem 0.85rem", marginBottom:"0.75rem", background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>
