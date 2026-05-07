@@ -411,7 +411,13 @@ export default function HostView() {
     setFavTemplateIds(next);
     safeSave(FAV_TEMPLATES_KEY, next);
   };
-  const appearanceBg = appearance === "light" ? "#f8fafc" : appearance === "soft" ? "#141b2d" : appearance === "contrast" ? "#000" : "#090d18";
+  const getAppearanceBg = (mode: "light" | "soft" | "contrast" | "dark") => {
+    if (mode === "light") return "#f8fafc";
+    if (mode === "soft") return "#141b2d";
+    if (mode === "contrast") return "#000";
+    return "#090d18";
+  };
+  const appearanceBg = getAppearanceBg(appearance);
     : appearance === "soft"
     : appearance === "contrast"
     ? `radial-gradient(circle at top, #ffffff22 0%, #000 62%)`
