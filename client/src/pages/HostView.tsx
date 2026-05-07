@@ -11,7 +11,6 @@ import {
 } from "../lib/store";
 import HexBoard from "../components/HexBoard";
 import { showToast } from "../components/KcToast";
-import { safeLoad, safeRemove, safeSave } from "../lib/localData";
 
 // ── URL helpers ───────────────────────────────────────────────
 const BASE_URL = (import.meta.env.VITE_PUBLIC_APP_URL as string) || window.location.origin;
@@ -163,33 +162,22 @@ type StarterTemplate = {
   name: string;
   categories: string[];
   level: "مبتدئ" | "سهل" | "متوسط" | "صعب" | "مفتوح";
-  subject?: string;
-  difficultyLabel?: "easy"|"medium"|"hard";
-  estimatedMinutes?: number;
-  visibility?: "local"|"public"|"private";
-  favorite?: boolean;
   description: string;
   questions: string[];
   boardBanks?: Array<{ cellId:string; label:string; questionBank:any[] }>;
   createdAt?: string;
-  updatedAt?: string;
   userCreated?: boolean;
 };
 type TemplateQuestionItem = {
-  type?: "mcq"|"tf"|"fill"|"letter"|"image";
   letter?: string;
   question: string;
   answer: string;
-  choices?: string[];
-  imageUrl?: string;
   category?: string;
   difficulty?: BoardCell["difficulty"];
   hint?: string;
   explanation?: string;
 };
 const COMMUNITY_TEMPLATES_KEY = "knowledgeConnectCommunityTemplates";
-const LAST_TEMPLATE_KEY = "kc_last_template";
-const FAV_TEMPLATES_KEY = "kc_fav_templates";
 const ARABIC_LETTERS_FULL = ["أ","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","هـ","و","ي"];
 const LETTER_WORDS: Record<string, string[]> = {
   "أ":["أمل","أدب","أفق"],"ب":["بدر","بيت","باب"],"ت":["تفاح","تعاون","تاريخ"],"ث":["ثعلب","ثقة","ثواب"],"ج":["جبل","جوال","جائزة"],"ح":["حكمة","حياة","حب"],
@@ -225,7 +213,7 @@ const createFullLetterTemplate = (id: string, name: string, category: string, le
       explanation: "",
     })),
   }));
-  return { id, name, categories: [category], subject: category, level, difficultyLabel: level==="صعب"?"hard":level==="سهل"?"easy":"medium", estimatedMinutes: 12, visibility:"local", description: `قالب ${category} محلي.`, questions: boardBanks.map(b => b.questionBank[0].question), boardBanks };
+  return { id, name, categories: [category], level, description: `قالب ${category} محلي.`, questions: boardBanks.map(b => b.questionBank[0].question), boardBanks };
 };
 const STARTER_TEMPLATES: StarterTemplate[] = [
   { id:"tpl-basic-letters", name:"قالب الحروف الأساسية", categories:["لغة عربية"], level:"مبتدئ", description:"لعبة بسيطة للتدرب على الحروف العربية.", questions:[], boardBanks:createFullLetterTemplate("x","x","لغة عربية","سهل",2).boardBanks },
@@ -328,8 +316,6 @@ export default function HostView() {
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateCategory, setTemplateCategory] = useState("");
   const [templateLevel, setTemplateLevel] = useState("");
-  const [templateSort, setTemplateSort] = useState<"newest"|"title"|"questions"|"difficulty">("newest");
-  const [favTemplateIds, setFavTemplateIds] = useState<string[]>([]);
   const [questionSearch, setQuestionSearch] = useState("");
   const [questionCategoryFilter, setQuestionCategoryFilter] = useState("");
   const [questionDifficultyFilter, setQuestionDifficultyFilter] = useState<""|"easy"|"medium"|"hard">("");
@@ -348,15 +334,9 @@ export default function HostView() {
   const savedResultForRoundRef = useRef<string>("");
   const [presentationMode, setPresentationMode] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
-  const [gameMode, setGameMode] = useState<"classic"|"timed"|"practice"|"challenge">("classic");
-  const [currentStreak, setCurrentStreak] = useState(0);
-  const [bestStreak, setBestStreak] = useState(0);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [wrongCount, setWrongCount] = useState(0);
-  const [feedbackMsg, setFeedbackMsg] = useState("");
   const [timerCustom, setTimerCustom] = useState(45);
   const [winningPathIds, setWinningPathIds] = useState<string[]>([]);
-  const [appearance, setAppearance] = useState<"dark"|"light"|"soft"|"contrast">("dark");
+  const [appearance, setAppearance] = useState<"dark"|"light"|"mid">("dark");
   const unsubRef = useRef<(()=>void)|null>(null);
   const roomRef = useRef<RoomState|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
@@ -390,8 +370,7 @@ export default function HostView() {
       }
     }
     const ap = localStorage.getItem("kc_appearance");
-    if (ap === "mid") setAppearance("soft");
-    if (ap === "dark" || ap === "light" || ap === "soft" || ap === "contrast") setAppearance(ap);
+    if (ap === "dark" || ap === "light" || ap === "mid") setAppearance(ap);
     if (localStorage.getItem("kc_open_templates") === "1") {
       setAppView("templates");
       localStorage.removeItem("kc_open_templates");
@@ -401,71 +380,32 @@ export default function HostView() {
       const parsed = JSON.parse(rr);
       if (Array.isArray(parsed)) setResults(parsed);
     }
-    setFavTemplateIds(safeLoad<string[]>(FAV_TEMPLATES_KEY, []));
   }, []);
   const persistGames = (next: SavedGame[]) => { setSavedGames(next); localStorage.setItem(GAMES_KEY, JSON.stringify(next)); };
   const persistResults = (next: GameResult[]) => { setResults(next); localStorage.setItem(RESULTS_KEY, JSON.stringify(next)); };
-  const deleteResult = (id: string) => persistResults(results.filter(r => r.id !== id));
-  const toggleFavoriteTemplate = (id: string) => {
-    const next = favTemplateIds.includes(id) ? favTemplateIds.filter(x => x !== id) : [...favTemplateIds, id];
-    setFavTemplateIds(next);
-    safeSave(FAV_TEMPLATES_KEY, next);
-  };
+  const appearanceBg = appearance === "light" ? "#f8fafc" : appearance === "mid" ? "#111827" : "#090d18";
   useEffect(() => {
     try {
       const raw = localStorage.getItem(COMMUNITY_TEMPLATES_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setCommunityTemplates(parsed);
-      }
+      if (Array.isArray(parsed)) setCommunityTemplates(parsed);
     } catch {
       showToast.warning("تعذر قراءة قوالب المجتمع المحفوظة.");
     }
   }, []);
 
-  const getAppearanceBg = (mode: "light" | "soft" | "contrast" | "dark") => {
-    if (mode === "light") return "#f8fafc";
-    if (mode === "soft") return "#141b2d";
-    if (mode === "contrast") return "#000";
-    return "#090d18";
-  };
-  const appearanceBg = getAppearanceBg(appearance);
-  const getPageGradient = (mode: "light" | "soft" | "contrast" | "dark") => {
-    if (mode === "light") {
-      return `radial-gradient(circle at top, ${themeAccent[themeName]}22 0%, #f8fafc 55%)`;
-    }
-    if (mode === "soft") {
-      return `radial-gradient(circle at top, ${themeAccent[themeName]}33 0%, #141b2d 60%)`;
-    }
-    if (mode === "contrast") {
-      return `radial-gradient(circle at top, #ffffff22 0%, #000 62%)`;
-    }
-    return `radial-gradient(circle at top, ${themeAccent[themeName]}33 0%, #090d18 60%)`;
-  };
-  const pageGradient = getPageGradient(appearance);
-
+  // Load last room
   useEffect(() => {
     const last = loadLastRoomCode();
-    if (last) {
+    if (last && isFirebaseConfigured()) {
       setRoomCode(last);
-
-      const unsub = subscribeToRoom(last, (s) => {
-        if (s) {
-          setRoom(s);
-        } else {
-          setRoom(null);
-          setRoomCode("");
-          saveLastRoomCode("");
-        }
+      const unsub = subscribeToRoom(last, s => {
+        if (s) setRoom(s); else { setRoom(null); setRoomCode(""); saveLastRoomCode(""); }
       });
-
       unsubRef.current = unsub;
     }
-
-    return () => {
-      unsubRef.current?.();
-    };
+    return () => { unsubRef.current?.(); };
   }, []);
 
   // Timer
@@ -579,19 +519,11 @@ export default function HostView() {
   const markCorrect = async () => {
     if (!room?.activeQuestion || actionLock) return;
     if (room.winnerTeam !== 0) { showToast.info("انتهت اللعبة بالفعل. اضغط إعادة اللعب للبدء من جديد."); return; }
-    const nextStreak = currentStreak + 1;
-    setCurrentStreak(nextStreak);
-    setBestStreak(v => Math.max(v, nextStreak));
-    setCorrectCount(v => v + 1);
-    setFeedbackMsg(nextStreak >= 3 ? `✅ Correct! Streak x${nextStreak}` : "✅ Correct!");
     setActionLock(true);
     try { await claimCell(room.activeQuestion.cellId); } finally { setActionLock(false); }
   };
   const markWrong = async () => {
     if (!room) return;
-    setWrongCount(v => v + 1);
-    setCurrentStreak(0);
-    setFeedbackMsg("❌ Wrong answer");
     await push({ questionStatus:"wrong" });
     if (room.stealMode==="steal") showToast.info("فرصة سرقة متاحة!");
   };
@@ -622,8 +554,6 @@ export default function HostView() {
   const skipQ = async () => {
     if (!room) return;
     setSkippedCount(v => v + 1);
-    setCurrentStreak(0);
-    setFeedbackMsg("⏭ Question skipped");
     const cell = room.board.find(c=>c.id===room.activeQuestion?.cellId);
     const bank = cell ? (Array.isArray((cell as any).questionBank) && (cell as any).questionBank.length ? (cell as any).questionBank : (cell.question ? [{ question:cell.question, answer:cell.answer, category:cell.category, difficulty:cell.difficulty, points:cell.points, hint:cell.hint, explanation:cell.explanation }] : [])) : [];
     if (room.activeQuestion && bank.length > 1) {
@@ -644,10 +574,6 @@ export default function HostView() {
   const startTimer = () => push({ timerRunning:true });
   const pauseTimer = () => push({ timerRunning:false });
   const resetTimer = () => { if (!room) return; push({ timerRunning:false, timerValue:room.timerSetting }); };
-  useEffect(() => {
-    if (!room) return;
-    if (gameMode === "timed" && room.timerSetting === 0) push({ timerSetting:30, timerValue:30, timerRunning:false });
-  }, [gameMode]);
   const addScore = (t: 1|2, d: number) => {
     if (!room) return;
     if (t===1) push({ team1Score: Math.max(0, room.team1Score+d) });
@@ -713,10 +639,6 @@ export default function HostView() {
         timerRunning:false, timerValue:room.timerSetting, winnerMessage:"", winnerTeam:0,
         questionStatus:"idle", gameStatus:"lobby", activeTeam:1, roundNumber:1 });
       setSkippedCount(0);
-      setCurrentStreak(0);
-      setBestStreak(0);
-      setCorrectCount(0);
-      setWrongCount(0);
       setWinningPathIds([]);
       savedResultForRoundRef.current = "";
       showToast.success("تم إعادة ضبط اللعبة");
@@ -852,7 +774,6 @@ export default function HostView() {
         };
       });
       await push({ board: nextBoard });
-      safeSave(LAST_TEMPLATE_KEY, tpl);
       if (skipped > 0) showToast.warning("تم تجاهل بعض الأسئلة لأنها لا تطابق الحروف المحددة.");
       showToast.success("تم تحميل القالب بنجاح.");
       if (missingLetters > 0) showToast.info("بعض الحروف لا تحتوي على أسئلة بعد.");
@@ -1098,40 +1019,9 @@ export default function HostView() {
     const sourceLabel = (source: SavedGame["source"]) => source === "template" ? "قالب" : source === "imported" ? "مستورد" : "مخصص";
     const categoryOptions = Array.from(new Set(savedGames.map(g => g.category)));
     const suggestedTemplates = [...STARTER_TEMPLATES, ...DEMO_COMMUNITY_TEMPLATES, ...communityTemplates].slice(0, 4);
-    const totalAnswered = results.reduce((n, r) => n + (r.totalQuestionsUsed || 0), 0);
-    const totalCorrect = Math.max(0, results.reduce((n, r) => n + (r.totalQuestionsUsed || 0) - (r.skippedQuestions || 0), 0));
-    const achievements = [
-      results.length >= 1 ? "🏁 أول لعبة" : "",
-      results.length >= 5 ? "🎮 خمس ألعاب" : "",
-      totalAnswered >= 10 ? "📚 10 أسئلة" : "",
-      results.some(r => r.skippedQuestions === 0 && r.totalQuestionsUsed > 0) ? "💯 جولة مثالية" : "",
-      favTemplateIds.length > 0 ? "⭐ مفضلات القوالب" : "",
-    ].filter(Boolean);
     return (
-              <button className="btn-secondary" onClick={()=>{ setAppearance("soft"); localStorage.setItem("kc_appearance","soft"); }}>ناعم</button>
-              <button className="btn-secondary" onClick={()=>{ setAppearance("contrast"); localStorage.setItem("kc_appearance","contrast"); }}>تباين عالٍ</button>
-            <div className="kc-card">
-              <div className="section-title">الملف والتقدم</div>
-              <div className="badge-chip">ألعاب لعبت: {results.length}</div>
-              <div className="badge-chip">أسئلة مجابة: {totalAnswered}</div>
-              <div className="badge-chip">معدل الدقة: {totalAnswered ? Math.round((totalCorrect / totalAnswered) * 100) : 0}%</div>
-              <div className="badge-chip">مفضلات القوالب: {favTemplateIds.length}</div>
-              <div style={{ fontSize:"0.75rem", color:"#94a3b8" }}>الإنجازات: {achievements.length ? achievements.join(" • ") : "ابدأ أول لعبة لفتح الإنجازات"}</div>
-              <div style={{ display:"flex", gap:"0.35rem", marginTop:"0.45rem", flexWrap:"wrap" }}>
-                <button className="btn-secondary" onClick={() => {
-                  const last = safeLoad<StarterTemplate | null>(LAST_TEMPLATE_KEY, null);
-                  if (!last) { showToast.info("لا يوجد قالب أخير"); return; }
-                  setAppView("host");
-                  if (!room) handleCreate();
-                  setTimeout(() => useTemplate(last), 250);
-                }}>تشغيل آخر قالب</button>
-                <button className="btn-danger" onClick={() => confirm("هل أنت متأكد؟ سيتم حذف البيانات المحلية من هذا الجهاز.", () => {
-                  [PROFILE_KEY, GAMES_KEY, RESULTS_KEY, COMMUNITY_TEMPLATES_KEY, LAST_TEMPLATE_KEY, FAV_TEMPLATES_KEY].forEach(safeRemove);
-                  window.location.reload();
-                })}>إعادة ضبط البيانات</button>
-              </div>
-            </div>
-          <div style={{marginBottom:"0.8rem"}}><div style={{fontWeight:700,color:"#cbd5e1",marginBottom:"0.3rem"}}>المظهر</div><div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap"}}><button className="btn-secondary" onClick={()=>{ setAppearance("light"); localStorage.setItem("kc_appearance","light"); }}>الوضع الفاتح</button><button className="btn-secondary" onClick={()=>{ setAppearance("soft"); localStorage.setItem("kc_appearance","soft"); }}>الوضع الناعم</button><button className="btn-secondary" onClick={()=>{ setAppearance("dark"); localStorage.setItem("kc_appearance","dark"); }}>الوضع الداكن</button><button className="btn-secondary" onClick={()=>{ setAppearance("contrast"); localStorage.setItem("kc_appearance","contrast"); }}>تباين عالٍ</button></div></div>
+      <div className="container" style={{ paddingTop:"1.5rem", paddingBottom:"2rem", background:appearanceBg, minHeight:"100vh" }}>
+        <div className="kc-card" style={{ marginBottom:"1rem" }}>
           <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:"0.5rem" }}>
             <div><div style={{ fontSize:"1.4rem", fontWeight:900, color:"#f59e0b" }}>وصلة المعرفة • لوحة التحكم</div><div style={{ color:"#94a3b8" }}>مرحباً، {profile.hostName}{profile.className ? ` • الصف/الفعالية: ${profile.className}` : ""}{profile.orgName ? ` • الجهة: ${profile.orgName}` : ""}</div></div>
             <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", alignItems:"center" }}>
@@ -1400,8 +1290,6 @@ export default function HostView() {
                 <span className="badge-chip" style={{ borderColor: room.team2.color, color: room.team2.color }}>
                   {room.team2.name}: {room.board.filter(c=>c.claimedBy===2).length}
                 </span>
-                <span className="badge-chip">Final: صحيح {correctCount} • خطأ {wrongCount} • تخطي {skippedCount}</span>
-                <span className="badge-chip">Best streak: {bestStreak} • Mode: {gameMode}</span>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
                 <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
@@ -1584,25 +1472,10 @@ export default function HostView() {
                 <select className="kc-input" style={{ maxWidth:160 }} value={templateLevel} onChange={e=>setTemplateLevel(e.target.value)}>
                   <option value="">كل المستويات</option><option value="سهل">سهل</option><option value="متوسط">متوسط</option><option value="صعب">صعب</option>
                 </select>
-                <select className="kc-input" style={{ maxWidth:170 }} value={templateSort} onChange={e=>setTemplateSort(e.target.value as any)}>
-                  <option value="newest">الأحدث</option><option value="title">العنوان A-Z</option><option value="questions">عدد الأسئلة</option><option value="difficulty">الصعوبة</option>
-                </select>
               </div>
               <div style={{ fontWeight:700, color:"#94a3b8", marginBottom:"0.5rem" }}>نماذج جاهزة مستوحاة من المجتمع (قوالب تجريبية محلية)</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.75rem" }}>
-                {[...STARTER_TEMPLATES, ...DEMO_COMMUNITY_TEMPLATES, ...communityTemplates]
-                .filter(tpl=>!templateSearch || tpl.name.includes(templateSearch) || (tpl.subject || "").includes(templateSearch))
-                .filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory))
-                .filter(tpl=>!templateLevel || tpl.level===templateLevel)
-                .sort((a,b)=>{
-                  const aQ = a.boardBanks?.reduce((n,x)=>n+(x.questionBank?.length||0),0) || a.questions.length;
-                  const bQ = b.boardBanks?.reduce((n,x)=>n+(x.questionBank?.length||0),0) || b.questions.length;
-                  if (templateSort==="title") return a.name.localeCompare(b.name, "ar");
-                  if (templateSort==="questions") return bQ-aQ;
-                  if (templateSort==="difficulty") return String(a.level).localeCompare(String(b.level), "ar");
-                  return String(b.createdAt||"").localeCompare(String(a.createdAt||""));
-                })
-                .map(tpl => {
+                {[...STARTER_TEMPLATES, ...DEMO_COMMUNITY_TEMPLATES, ...communityTemplates].filter(tpl=>!templateSearch || tpl.name.includes(templateSearch)).filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory)).filter(tpl=>!templateLevel || tpl.level===templateLevel).map(tpl => {
                   const totalQ = tpl.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || tpl.questions.length;
                   const covered = tpl.boardBanks?.filter(b=>b.questionBank?.length).length || 0;
                   const avg = covered ? (totalQ / covered).toFixed(1) : "0";
@@ -1613,8 +1486,6 @@ export default function HostView() {
                     <div style={{ fontSize:"0.74rem", color:"#94a3b8", lineHeight:1.8 }}>
                       <div>التصنيف: {tpl.categories.join("، ")}</div>
                       <div>المستوى: {tpl.level}</div>
-                      <div>الصف/المرحلة: {tpl.level}</div>
-                      <div>الوقت المتوقع: {tpl.estimatedMinutes || Math.max(8, Math.round(totalQ * 0.7))} دقيقة</div>
                       <div>الحروف المغطاة: {covered}</div>
                       <div>إجمالي الأسئلة: {totalQ}</div>
                       <div>المتوسط: {avg} أسئلة لكل حرف</div>
@@ -1624,7 +1495,6 @@ export default function HostView() {
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginTop:"0.7rem" }}>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
                       <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدم القالب</button>
-                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>toggleFavoriteTemplate(tpl.id)}>{favTemplateIds.includes(tpl.id) ? "★ مفضل" : "☆ تفضيل"}</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>تعديل نسخة</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير قالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplateCsv(tpl)}>تصدير كجدول</button>
@@ -1644,28 +1514,12 @@ export default function HostView() {
             <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
               <div className="kc-card">
                 <div className="section-title">وضع الاستضافة</div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:"0.35rem", marginBottom:"0.6rem" }}>
-                  {[
-                    ["classic","🎯 كلاسيكي","لعبة متوازنة"],
-                    ["timed","⏱ مؤقت","سريع وحماسي"],
-                    ["practice","📘 تدريب","بدون ضغط تنافسي"],
-                    ["challenge","🔥 تحدي","سكور وسلاسل أقوى"],
-                  ].map(([id,label,desc])=>(
-                    <button key={id} className="btn-secondary" onClick={()=>setGameMode(id as any)} style={{ textAlign:"right", border: gameMode===id ? "1px solid #f59e0b" : undefined }}>
-                      <div style={{fontWeight:700}}>{label}</div><div style={{fontSize:"0.68rem",color:"#94a3b8"}}>{desc}</div>
-                    </button>
-                  ))}
-                </div>
-                {feedbackMsg && <div style={{ marginBottom:"0.5rem", fontSize:"0.8rem", color:"#facc15" }}>{feedbackMsg}</div>}
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.45rem" }}>
                   <div className="badge-chip" style={{ borderColor:room.team1.color, color:room.team1.color }}>خلايا الفريق الأزرق: {room.board.filter(c=>c.claimedBy===1).length}</div>
                   <div className="badge-chip" style={{ borderColor:room.team2.color, color:room.team2.color }}>خلايا الفريق الأحمر: {room.board.filter(c=>c.claimedBy===2).length}</div>
                   <div className="badge-chip">الخلايا المتبقية: {room.board.filter(c=>c.claimedBy===0).length}</div>
                   <div className="badge-chip">الأسئلة المتخطاة: {skippedCount}</div>
                   <div className="badge-chip">الدور الحالي: {room.activeTeam===1 ? room.team1.name : room.team2.name}</div>
-                  <div className="badge-chip">السلسلة: {currentStreak} • الأفضل: {bestStreak}</div>
-                  <div className="badge-chip">صحيح: {correctCount} • خطأ: {wrongCount}</div>
-                  <div className="badge-chip">النمط: {gameMode}</div>
                 </div>
               </div>
               {/* Teams */}
@@ -1793,7 +1647,7 @@ export default function HostView() {
                       <button className="btn-green" style={{ fontSize:"0.85rem" }} onClick={markCorrect}>✅ تحقق من الإجابة</button>
                       <button className="btn-danger" style={{ fontSize:"0.85rem" }} onClick={markWrong}>❌ إجابة خاطئة</button>
                       {room.stealMode!=="none" && <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={allowSteal}>🔄 فرصة سرقة</button>}
-                      <button className="btn-secondary" style={{ fontSize:"0.85rem", opacity: gameMode==="challenge" ? 0.55 : 1 }} onClick={skipQ} disabled={gameMode==="challenge"}>⏭ تخطي السؤال</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={skipQ}>⏭ تخطي السؤال</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={cancelQuestion}>✖ إغلاق</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={nextQuestion}>➡ السؤال التالي</button>
                     </div>
