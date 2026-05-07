@@ -334,6 +334,12 @@ export default function HostView() {
   const savedResultForRoundRef = useRef<string>("");
   const [presentationMode, setPresentationMode] = useState(false);
   const [skippedCount, setSkippedCount] = useState(0);
+  const [gameMode, setGameMode] = useState<"classic"|"timed"|"practice"|"challenge">("classic");
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [wrongCount, setWrongCount] = useState(0);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
   const [timerCustom, setTimerCustom] = useState(45);
   const [winningPathIds, setWinningPathIds] = useState<string[]>([]);
   const [appearance, setAppearance] = useState<"dark"|"light"|"soft"|"contrast">("dark");
@@ -523,11 +529,19 @@ export default function HostView() {
   const markCorrect = async () => {
     if (!room?.activeQuestion || actionLock) return;
     if (room.winnerTeam !== 0) { showToast.info("انتهت اللعبة بالفعل. اضغط إعادة اللعب للبدء من جديد."); return; }
+    const nextStreak = currentStreak + 1;
+    setCurrentStreak(nextStreak);
+    setBestStreak(v => Math.max(v, nextStreak));
+    setCorrectCount(v => v + 1);
+    setFeedbackMsg(nextStreak >= 3 ? `✅ Correct! Streak x${nextStreak}` : "✅ Correct!");
     setActionLock(true);
     try { await claimCell(room.activeQuestion.cellId); } finally { setActionLock(false); }
   };
   const markWrong = async () => {
     if (!room) return;
+    setWrongCount(v => v + 1);
+    setCurrentStreak(0);
+    setFeedbackMsg("❌ Wrong answer");
     await push({ questionStatus:"wrong" });
     if (room.stealMode==="steal") showToast.info("فرصة سرقة متاحة!");
   };
@@ -558,6 +572,8 @@ export default function HostView() {
   const skipQ = async () => {
     if (!room) return;
     setSkippedCount(v => v + 1);
+    setCurrentStreak(0);
+    setFeedbackMsg("⏭ Question skipped");
     const cell = room.board.find(c=>c.id===room.activeQuestion?.cellId);
     const bank = cell ? (Array.isArray((cell as any).questionBank) && (cell as any).questionBank.length ? (cell as any).questionBank : (cell.question ? [{ question:cell.question, answer:cell.answer, category:cell.category, difficulty:cell.difficulty, points:cell.points, hint:cell.hint, explanation:cell.explanation }] : [])) : [];
     if (room.activeQuestion && bank.length > 1) {
@@ -578,6 +594,10 @@ export default function HostView() {
   const startTimer = () => push({ timerRunning:true });
   const pauseTimer = () => push({ timerRunning:false });
   const resetTimer = () => { if (!room) return; push({ timerRunning:false, timerValue:room.timerSetting }); };
+  useEffect(() => {
+    if (!room) return;
+    if (gameMode === "timed" && room.timerSetting === 0) push({ timerSetting:30, timerValue:30, timerRunning:false });
+  }, [gameMode]);
   const addScore = (t: 1|2, d: number) => {
     if (!room) return;
     if (t===1) push({ team1Score: Math.max(0, room.team1Score+d) });
@@ -643,6 +663,10 @@ export default function HostView() {
         timerRunning:false, timerValue:room.timerSetting, winnerMessage:"", winnerTeam:0,
         questionStatus:"idle", gameStatus:"lobby", activeTeam:1, roundNumber:1 });
       setSkippedCount(0);
+      setCurrentStreak(0);
+      setBestStreak(0);
+      setCorrectCount(0);
+      setWrongCount(0);
       setWinningPathIds([]);
       savedResultForRoundRef.current = "";
       showToast.success("تم إعادة ضبط اللعبة");
@@ -1295,6 +1319,8 @@ export default function HostView() {
                 <span className="badge-chip" style={{ borderColor: room.team2.color, color: room.team2.color }}>
                   {room.team2.name}: {room.board.filter(c=>c.claimedBy===2).length}
                 </span>
+                <span className="badge-chip">Final: صحيح {correctCount} • خطأ {wrongCount} • تخطي {skippedCount}</span>
+                <span className="badge-chip">Best streak: {bestStreak} • Mode: {gameMode}</span>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
                 <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
@@ -1519,12 +1545,28 @@ export default function HostView() {
             <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
               <div className="kc-card">
                 <div className="section-title">وضع الاستضافة</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:"0.35rem", marginBottom:"0.6rem" }}>
+                  {[
+                    ["classic","🎯 كلاسيكي","لعبة متوازنة"],
+                    ["timed","⏱ مؤقت","سريع وحماسي"],
+                    ["practice","📘 تدريب","بدون ضغط تنافسي"],
+                    ["challenge","🔥 تحدي","سكور وسلاسل أقوى"],
+                  ].map(([id,label,desc])=>(
+                    <button key={id} className="btn-secondary" onClick={()=>setGameMode(id as any)} style={{ textAlign:"right", border: gameMode===id ? "1px solid #f59e0b" : undefined }}>
+                      <div style={{fontWeight:700}}>{label}</div><div style={{fontSize:"0.68rem",color:"#94a3b8"}}>{desc}</div>
+                    </button>
+                  ))}
+                </div>
+                {feedbackMsg && <div style={{ marginBottom:"0.5rem", fontSize:"0.8rem", color:"#facc15" }}>{feedbackMsg}</div>}
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.45rem" }}>
                   <div className="badge-chip" style={{ borderColor:room.team1.color, color:room.team1.color }}>خلايا الفريق الأزرق: {room.board.filter(c=>c.claimedBy===1).length}</div>
                   <div className="badge-chip" style={{ borderColor:room.team2.color, color:room.team2.color }}>خلايا الفريق الأحمر: {room.board.filter(c=>c.claimedBy===2).length}</div>
                   <div className="badge-chip">الخلايا المتبقية: {room.board.filter(c=>c.claimedBy===0).length}</div>
                   <div className="badge-chip">الأسئلة المتخطاة: {skippedCount}</div>
                   <div className="badge-chip">الدور الحالي: {room.activeTeam===1 ? room.team1.name : room.team2.name}</div>
+                  <div className="badge-chip">السلسلة: {currentStreak} • الأفضل: {bestStreak}</div>
+                  <div className="badge-chip">صحيح: {correctCount} • خطأ: {wrongCount}</div>
+                  <div className="badge-chip">النمط: {gameMode}</div>
                 </div>
               </div>
               {/* Teams */}
@@ -1652,7 +1694,7 @@ export default function HostView() {
                       <button className="btn-green" style={{ fontSize:"0.85rem" }} onClick={markCorrect}>✅ تحقق من الإجابة</button>
                       <button className="btn-danger" style={{ fontSize:"0.85rem" }} onClick={markWrong}>❌ إجابة خاطئة</button>
                       {room.stealMode!=="none" && <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={allowSteal}>🔄 فرصة سرقة</button>}
-                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={skipQ}>⏭ تخطي السؤال</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.85rem", opacity: gameMode==="challenge" ? 0.55 : 1 }} onClick={skipQ} disabled={gameMode==="challenge"}>⏭ تخطي السؤال</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={cancelQuestion}>✖ إغلاق</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={nextQuestion}>➡ السؤال التالي</button>
                     </div>
