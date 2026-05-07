@@ -213,7 +213,7 @@ const createFullLetterTemplate = (id: string, name: string, category: string, le
       explanation: "",
     })),
   }));
-  return { id, name, categories: [category], level, questions: boardBanks.map(b => b.questionBank[0].question), boardBanks };
+  return { id, name, categories: [category], level, description: `قالب ${category} محلي.`, questions: boardBanks.map(b => b.questionBank[0].question), boardBanks };
 };
 const STARTER_TEMPLATES: StarterTemplate[] = [
   { id:"tpl-basic-letters", name:"قالب الحروف الأساسية", categories:["لغة عربية"], level:"مبتدئ", description:"لعبة بسيطة للتدرب على الحروف العربية.", questions:[], boardBanks:createFullLetterTemplate("x","x","لغة عربية","سهل",2).boardBanks },
@@ -270,7 +270,18 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
 // ═══════════════════════════════════════════════════════════════
 export default function HostView() {
   type LocalProfile = { hostName: string; className?: string; orgName?: string };
-  type SavedGame = { id: string; title: string; category: string; questionCount: number; updatedAt: string; source: "custom" | "template" | "imported"; state: RoomState };
+  type SavedGame = {
+    id: string;
+    title: string;
+    category: string;
+    questionCount: number;
+    createdAt: string;
+    updatedAt: string;
+    source: "custom" | "template" | "imported";
+    hostName?: string;
+    className?: string;
+    state: RoomState;
+  };
   const PROFILE_KEY = "kc_local_profile";
   const SESSION_KEY = "kc_local_session";
   const GAMES_KEY = "kc_saved_games";
@@ -293,6 +304,7 @@ export default function HostView() {
   const [savedGames, setSavedGames] = useState<SavedGame[]>([]);
   const [searchGame, setSearchGame] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
+  const [filterSource, setFilterSource] = useState("");
   const unsubRef = useRef<(()=>void)|null>(null);
   const roomRef = useRef<RoomState|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
@@ -304,7 +316,27 @@ export default function HostView() {
     const g = localStorage.getItem(GAMES_KEY);
     if (p) setProfile(JSON.parse(p));
     if (s === "1") setIsLogged(true);
-    if (g) setSavedGames(JSON.parse(g));
+    if (g) {
+      const parsed = JSON.parse(g);
+      if (Array.isArray(parsed)) {
+        const migrated = parsed
+          .filter((item) => item && typeof item === "object")
+          .map((item: any) => ({
+            id: String(item.id || `g_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`),
+            title: String(item.title || item.state?.gameTitle || "لعبة محفوظة"),
+            category: String(item.category || "عام"),
+            questionCount: Number(item.questionCount || item.state?.board?.filter?.((c:any)=>c.question?.trim?.() || c.questionBank?.length)?.length || 0),
+            createdAt: String(item.createdAt || item.updatedAt || new Date().toISOString()),
+            updatedAt: String(item.updatedAt || item.createdAt || new Date().toISOString()),
+            source: item.source === "template" || item.source === "imported" ? item.source : "custom",
+            hostName: item.hostName || "",
+            className: item.className || "",
+            state: item.state,
+          } as SavedGame))
+          .filter((item: SavedGame) => !!item.state?.board);
+        setSavedGames(migrated);
+      }
+    }
   }, []);
   const persistGames = (next: SavedGame[]) => { setSavedGames(next); localStorage.setItem(GAMES_KEY, JSON.stringify(next)); };
   useEffect(() => {
@@ -796,8 +828,11 @@ export default function HostView() {
       title: room.gameTitle || "لعبة جديدة",
       category: "عام",
       questionCount: room.board.filter(c => c.question.trim() || (Array.isArray((c as any).questionBank) && (c as any).questionBank.length)).length,
+      createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       source: "custom",
+      hostName: profile.hostName,
+      className: profile.className,
       state: room,
     };
     persistGames([game, ...savedGames]);
@@ -809,7 +844,7 @@ export default function HostView() {
     setAppView("host");
     showToast.success("تم تحميل اللعبة.");
   };
-  const duplicateSavedGame = (g: SavedGame) => persistGames([{ ...g, id:`g_${Date.now()}`, title:`${g.title} (نسخة)`, updatedAt:new Date().toISOString() }, ...savedGames]);
+  const duplicateSavedGame = (g: SavedGame) => persistGames([{ ...g, id:`g_${Date.now()}`, title:`${g.title} - نسخة`, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() }, ...savedGames]);
   const deleteSavedGame = (id: string) => {
     if (!window.confirm("هل أنت متأكد من حذف هذه اللعبة؟")) return;
     persistGames(savedGames.filter(g=>g.id!==id));
@@ -826,8 +861,19 @@ export default function HostView() {
         const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return;
         const parsed = JSON.parse(await file.text());
         if (!parsed?.state?.board) throw new Error();
-        persistGames([{ ...parsed, id:`g_${Date.now()}`, updatedAt:new Date().toISOString(), source:"imported" }, ...savedGames]);
-      } catch { showToast.error("تعذر قراءة القالب. تأكد من أن الملف صحيح."); }
+        persistGames([{
+          id:`g_${Date.now()}`,
+          title:String(parsed.title || parsed.state?.gameTitle || "لعبة مستوردة"),
+          category:String(parsed.category || "عام"),
+          questionCount:Number(parsed.questionCount || parsed.state.board.length || 0),
+          createdAt:String(parsed.createdAt || new Date().toISOString()),
+          updatedAt:new Date().toISOString(),
+          source:"imported",
+          hostName: String(parsed.hostName || profile.hostName || ""),
+          className: String(parsed.className || profile.className || ""),
+          state: parsed.state,
+        }, ...savedGames]);
+      } catch { showToast.error("تعذر قراءة اللعبة. تأكد من أن الملف صحيح."); }
     };
     input.click();
   };
@@ -850,7 +896,10 @@ export default function HostView() {
   }
 
   if (appView !== "host") {
-    const filtered = savedGames.filter(g => (!searchGame || g.title.includes(searchGame)) && (!filterCategory || g.category === filterCategory));
+    const filtered = savedGames.filter(g => (!searchGame || g.title.includes(searchGame)) && (!filterCategory || g.category === filterCategory) && (!filterSource || g.source === filterSource));
+    const latest = savedGames[0];
+    const sourceLabel = (source: SavedGame["source"]) => source === "template" ? "قالب" : source === "imported" ? "مستورد" : "مخصص";
+    const categoryOptions = Array.from(new Set(savedGames.map(g => g.category)));
     return (
       <div className="container" style={{ paddingTop:"1.5rem", paddingBottom:"2rem" }}>
         <div className="kc-card" style={{ marginBottom:"1rem" }}>
@@ -864,10 +913,17 @@ export default function HostView() {
             </div>
           </div>
         </div>
-        {appView === "dashboard" && <div className="kc-card"> <div className="section-title">إجراءات سريعة</div><div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}><button className="btn-gold" onClick={()=>{setAppView("host"); if(!room) handleCreate();}}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setAppView("templates")}>اختيار قالب</button><button className="btn-secondary" onClick={()=>setAppView("games")}>ألعابي</button><button className="btn-secondary" onClick={()=>setAppView("results")}>آخر النتائج</button></div></div>}
+        {appView === "dashboard" && (
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.75rem" }}>
+            <div className="kc-card"><div className="section-title">مرحباً بك</div><div style={{color:"#f0ede8",fontWeight:700}}>مرحباً {profile.hostName}</div>{profile.className && <div style={{color:"#94a3b8"}}>الصف/الفعالية: {profile.className}</div>}{profile.orgName && <div style={{color:"#94a3b8"}}>الجهة: {profile.orgName}</div>}</div>
+            <div className="kc-card"><div className="section-title">إجراءات سريعة</div><div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap"}}><button className="btn-gold" onClick={()=>{setAppView("host"); if(!room) handleCreate();}}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setAppView("templates")}>عرض القوالب</button><button className="btn-secondary" onClick={()=>setAppView("games")}>ألعابي</button><button className="btn-secondary" onClick={()=>{setAppView("host"); if(!room) handleCreate();}}>بدء الاستضافة</button><button className="btn-secondary" onClick={importSavedGame}>استيراد لعبة</button></div></div>
+            <div className="kc-card"><div className="section-title">ألعابي</div><div style={{color:"#94a3b8"}}>عدد الألعاب المحفوظة: {savedGames.length}</div>{latest ? <div style={{fontSize:"0.85rem",color:"#f0ede8",marginTop:"0.4rem"}}>آخر لعبة: {latest.title}</div> : <div style={{color:"#94a3b8"}}>لا توجد ألعاب محفوظة بعد.</div>}<button className="btn-secondary" style={{marginTop:"0.6rem"}} onClick={()=>setAppView("games")}>عرض كل الألعاب</button></div>
+            <div className="kc-card"><div className="section-title">آخر النتائج</div><div style={{color:"#94a3b8"}}>لا توجد نتائج محفوظة بعد.</div></div>
+          </div>
+        )}
         {appView === "templates" && <div className="kc-card"><div className="section-title">قوالب الألعاب</div><div style={{color:"#94a3b8"}}>انتقل إلى وضع الاستضافة ثم افتح تبويب الإعداد لاستخدام القوالب.</div><button className="btn-gold" style={{marginTop:"0.75rem"}} onClick={()=>{ setAppView("host"); if(!room) handleCreate(); setActiveTab("setup"); }}>فتح القوالب</button></div>}
         {appView === "results" && <div className="kc-card"><div className="section-title">آخر النتائج</div><div style={{color:"#94a3b8"}}>{savedGames.length ? "ستظهر النتائج من الألعاب المحفوظة محلياً." : "لا توجد نتائج بعد."}</div></div>}
-        {appView === "games" && <div className="kc-card"><div className="section-title">ألعابي</div><div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.75rem"}}><input className="kc-input" style={{maxWidth:240}} placeholder="ابحث باسم اللعبة..." value={searchGame} onChange={e=>setSearchGame(e.target.value)} /><input className="kc-input" style={{maxWidth:180}} placeholder="التصنيف" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} /><button className="btn-secondary" onClick={importSavedGame}>استيراد</button></div>{!filtered.length ? <div style={{color:"#94a3b8"}}>لا توجد ألعاب محفوظة بعد. أنشئ لعبة جديدة أو استخدم أحد القوالب.</div> : <div style={{display:"grid",gap:"0.5rem"}}>{filtered.map(g=><div key={g.id} style={{background:"#141e2d",border:"1px solid #1a2332",borderRadius:"12px",padding:"0.75rem"}}><div style={{fontWeight:800,color:"#f0ede8"}}>{g.title}</div><div style={{fontSize:"0.78rem",color:"#94a3b8"}}>عدد الأسئلة: {g.questionCount} • آخر تعديل: {new Date(g.updatedAt).toLocaleDateString("ar")} • المصدر: {g.source}</div><div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap",marginTop:"0.5rem"}}><button className="btn-gold" onClick={()=>loadSavedGame(g)}>تشغيل</button><button className="btn-secondary" onClick={()=>loadSavedGame(g)}>تعديل</button><button className="btn-secondary" onClick={()=>duplicateSavedGame(g)}>نسخ</button><button className="btn-secondary" onClick={()=>exportSavedGame(g)}>تصدير</button><button className="btn-danger" onClick={()=>deleteSavedGame(g.id)}>حذف</button></div></div>)}</div>}</div>}
+        {appView === "games" && <div className="kc-card"><div className="section-title">ألعابي</div><div style={{display:"flex",gap:"0.5rem",flexWrap:"wrap",marginBottom:"0.75rem"}}><input className="kc-input" style={{maxWidth:240}} placeholder="بحث عن لعبة" value={searchGame} onChange={e=>setSearchGame(e.target.value)} /><select className="kc-input" style={{maxWidth:180}} value={filterCategory} onChange={e=>setFilterCategory(e.target.value)}><option value="">كل التصنيفات</option>{categoryOptions.map(c=><option key={c} value={c}>{c}</option>)}</select><select className="kc-input" style={{maxWidth:160}} value={filterSource} onChange={e=>setFilterSource(e.target.value)}><option value="">كل الأنواع</option><option value="custom">مخصص</option><option value="template">قالب</option><option value="imported">مستورد</option></select><button className="btn-secondary" onClick={importSavedGame}>استيراد لعبة</button></div>{!filtered.length ? <div style={{color:"#94a3b8"}}>لا توجد ألعاب محفوظة بعد. أنشئ لعبة جديدة أو استخدم أحد القوالب.<div style={{marginTop:"0.6rem",display:"flex",gap:"0.4rem",flexWrap:"wrap"}}><button className="btn-gold" onClick={()=>{setAppView("host"); if(!room) handleCreate();}}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setAppView("templates")}>عرض القوالب</button><button className="btn-secondary" onClick={importSavedGame}>استيراد لعبة</button></div></div> : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:"0.5rem"}}>{filtered.map(g=><div key={g.id} style={{background:"#141e2d",border:"1px solid #1a2332",borderRadius:"12px",padding:"0.75rem"}}><div style={{fontWeight:800,color:"#f0ede8"}}>{g.title}</div><div style={{fontSize:"0.78rem",color:"#94a3b8"}}>التصنيف: {g.category} • عدد الأسئلة: {g.questionCount}</div><div style={{fontSize:"0.78rem",color:"#94a3b8"}}>آخر تعديل: {new Date(g.updatedAt).toLocaleDateString("ar")} • النوع: {sourceLabel(g.source)}</div><div style={{display:"flex",gap:"0.35rem",flexWrap:"wrap",marginTop:"0.5rem"}}><button className="btn-gold" onClick={()=>loadSavedGame(g)}>تشغيل</button><button className="btn-secondary" onClick={()=>loadSavedGame(g)}>تعديل</button><button className="btn-secondary" onClick={()=>duplicateSavedGame(g)}>نسخ</button><button className="btn-secondary" onClick={()=>exportSavedGame(g)}>تصدير</button><button className="btn-danger" onClick={()=>deleteSavedGame(g.id)}>حذف</button></div></div>)}</div>}</div>}
       </div>
     );
   }
@@ -1311,7 +1367,7 @@ export default function HostView() {
               </div>
               <HexBoard board={room.board} gridSize={room.gridSize} mode="host-game"
                 selectedCellId={room.selectedCellId} team1={room.team1} team2={room.team2}
-                onCellClick={handleCellClick} winnerTeam={room.winnerTeam} />
+                onCellClick={handleCellClick} />
               {room.activeQuestion && room.questionStatus!=="correct" && (
                 <button className="btn-gold" style={{ width:"100%", marginTop:"1rem", fontSize:"0.9rem" }} onClick={markCorrect} disabled={actionLock}>
                   🎯 منح الحرف "{room.activeQuestion.cellLabel}" للفريق النشط
