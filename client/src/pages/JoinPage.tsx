@@ -3,7 +3,6 @@ import { useLocation } from "wouter";
 import { joinRoom } from "../lib/roomOps";
 import { isFirebaseConfigured } from "../lib/firebase";
 import { showToast } from "../components/KcToast";
-import { appearanceGradient, appearanceSurface, readAppearanceMode, readVisualTheme, themeAccent } from "../lib/appearance";
 
 function getParam(key: string): string {
   if (typeof window === "undefined") return "";
@@ -15,10 +14,6 @@ export default function JoinPage() {
   const [roomCode, setRoomCode] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [loading, setLoading] = useState(false);
-  const mode = readAppearanceMode();
-  const visualTheme = readVisualTheme();
-  const surface = appearanceSurface(mode);
-  const accent = themeAccent[visualTheme];
 
   // Auto-fill room code from URL ?room=XXXXXX
   useEffect(() => {
@@ -29,8 +24,8 @@ export default function JoinPage() {
   const handleJoin = async () => {
     const code = roomCode.trim();
     const name = playerName.trim();
-    if (!code || code.length !== 6) { showToast.error("أدخل رمز الغرفة المكوّن من 6 أرقام"); return; }
-    if (!name) { showToast.error("الرجاء إدخال اسمك."); return; }
+    if (!code || code.length !== 6) { showToast.error("تنسيق الملف غير صالح."); return; }
+    if (!name) { showToast.error("يرجى إدخال الاسم."); return; }
     if (!isFirebaseConfigured()) { showToast.error("تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا. راجع ملف التعليمات أو تواصل مع المسؤول"); return; }
     setLoading(true);
     try {
@@ -55,21 +50,18 @@ export default function JoinPage() {
       alignItems: "center",
       justifyContent: "center",
       padding: "1.5rem",
-      background: appearanceGradient(mode, visualTheme),
-      color: surface.text,
+      background: "linear-gradient(160deg,#090d18 0%,#0f172a 60%,#090d18 100%)",
     }}>
       {/* Page identity badge */}
-      <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:surface.card, color:surface.muted, marginBottom:"1.5rem", fontWeight:600 }}>
       <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:"#1a2332", color:"#64748b", marginBottom:"1.5rem", fontWeight:600 }}>
         🏷 الانضمام إلى التحدي
       </div>
 
       {/* Logo */}
       <div style={{ marginBottom:"2rem", textAlign:"center" }}>
-        <div style={{ fontSize:"3.5rem", fontWeight:900, color:accent, fontFamily:"Cairo,sans-serif", lineHeight:1.1 }}>
+        <div style={{ fontSize:"3.5rem", fontWeight:900, color:"#f59e0b", fontFamily:"Cairo,sans-serif", lineHeight:1.1 }}>
           وصلة المعرفة
         </div>
-        <div style={{ fontSize:"0.9rem", color:surface.muted, marginTop:"0.4rem" }}>
         <div style={{ fontSize:"0.9rem", color:"#475569", marginTop:"0.4rem" }}>
           أهلًا بك في وصلة المعرفة — انضم بسرعة وابدأ التحدي
         </div>
@@ -78,13 +70,12 @@ export default function JoinPage() {
       {/* Card */}
       <div style={{
         width: "100%", maxWidth: 380,
-        background: surface.card,
-        border: `1.5px solid ${surface.border}`,
+        background: "#0f1623",
+        border: "1.5px solid #1a2332",
         borderRadius: "20px",
         padding: "2rem",
         boxShadow: "0 25px 60px rgba(0,0,0,0.6)",
       }}>
-        <h2 style={{ fontWeight:800, fontSize:"1.2rem", color:surface.text, textAlign:"center", marginBottom:"1.5rem" }}>
         <h2 style={{ fontWeight:800, fontSize:"1.2rem", color:"#f0ede8", textAlign:"center", marginBottom:"1.5rem" }}>
           الانضمام إلى الغرفة
         </h2>
@@ -92,7 +83,7 @@ export default function JoinPage() {
         <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
           {/* Room code */}
           <div>
-            <label style={{ display:"block", fontSize:"0.82rem", fontWeight:600, color:surface.muted, marginBottom:"0.4rem" }}>
+            <label style={{ display:"block", fontSize:"0.82rem", fontWeight:600, color:"#94a3b8", marginBottom:"0.4rem" }}>
               رمز الغرفة
             </label>
             <input
@@ -104,20 +95,20 @@ export default function JoinPage() {
               onKeyDown={e => e.key === "Enter" && handleJoin()}
               placeholder="٦ أرقام"
               style={{
-                width:"100%", background:surface.bg, border:`2px solid ${surface.border}`,
+                width:"100%", background:"#141e2d", border:"2px solid #1a2332",
                 borderRadius:"12px", padding:"0.75rem 1rem",
                 textAlign:"center", fontSize:"1.8rem", fontWeight:900,
-                letterSpacing:"0.3em", color:accent, outline:"none",
+                letterSpacing:"0.3em", color:"#f59e0b", outline:"none",
                 fontFamily:"Cairo,sans-serif", transition:"border-color 0.15s ease",
               }}
-              onFocus={e => (e.currentTarget.style.borderColor=accent)}
-              onBlur={e => (e.currentTarget.style.borderColor=surface.border)}
+              onFocus={e => (e.currentTarget.style.borderColor="#f59e0b")}
+              onBlur={e => (e.currentTarget.style.borderColor="#1a2332")}
             />
           </div>
 
           {/* Player name */}
           <div>
-            <label style={{ display:"block", fontSize:"0.82rem", fontWeight:600, color:surface.muted, marginBottom:"0.4rem" }}>
+            <label style={{ display:"block", fontSize:"0.82rem", fontWeight:600, color:"#94a3b8", marginBottom:"0.4rem" }}>
               اسمك
             </label>
             <input
@@ -127,13 +118,13 @@ export default function JoinPage() {
               onKeyDown={e => e.key === "Enter" && handleJoin()}
               placeholder="أدخل اسمك"
               style={{
-                width:"100%", background:surface.bg, border:`2px solid ${surface.border}`,
+                width:"100%", background:"#141e2d", border:"2px solid #1a2332",
                 borderRadius:"12px", padding:"0.75rem 1rem",
-                fontSize:"1rem", color:surface.text, outline:"none",
+                fontSize:"1rem", color:"#f0ede8", outline:"none",
                 fontFamily:"Cairo,sans-serif", transition:"border-color 0.15s ease",
               }}
-              onFocus={e => (e.currentTarget.style.borderColor=accent)}
-              onBlur={e => (e.currentTarget.style.borderColor=surface.border)}
+              onFocus={e => (e.currentTarget.style.borderColor="#f59e0b")}
+              onBlur={e => (e.currentTarget.style.borderColor="#1a2332")}
             />
           </div>
 
@@ -144,8 +135,8 @@ export default function JoinPage() {
             style={{
               width:"100%", padding:"0.85rem", borderRadius:"12px",
               fontSize:"1.05rem", fontWeight:800,
-              background: loading ? "#92400e" : accent,
-              color: mode === "light" ? "#0f172a" : "#090d18", border:"none",
+              background: loading ? "#92400e" : "#f59e0b",
+              color:"#090d18", border:"none",
               opacity: loading ? 0.7 : 1,
               transition:"all 0.15s ease",
               fontFamily:"Cairo,sans-serif",
@@ -153,11 +144,10 @@ export default function JoinPage() {
             onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform="translateY(0)"; }}
           >
-            {loading ? "جارٍ الانضمام..." : "الانضمام الآن 🎯"}
+            {loading ? "جارٍ الانضمام..." : "انضمام الطالب"}
           </button>
         </div>
 
-        <p style={{ textAlign:"center", fontSize:"0.78rem", color:surface.muted, marginTop:"1.25rem" }}>
         <p style={{ textAlign:"center", fontSize:"0.78rem", color:"#475569", marginTop:"1.25rem" }}>
           اطلب رمز الانضمام من المضيف ثم أدخله هنا
         </p>
@@ -165,9 +155,9 @@ export default function JoinPage() {
 
       {/* Host link */}
       <div style={{ marginTop:"2rem", textAlign:"center" }}>
-        <a href="/" style={{ fontSize:"0.85rem", color:surface.muted, textDecoration:"none" }}>
+        <a href="/" style={{ fontSize:"0.85rem", color:"#475569", textDecoration:"none" }}>
           هل أنت المضيف؟{" "}
-          <span style={{ color:accent, fontWeight:700 }}>افتح لوحة التحكم</span>
+          <span style={{ color:"#f59e0b", fontWeight:700 }}>العودة إلى لوحة التحكم</span>
         </a>
       </div>
     </div>
