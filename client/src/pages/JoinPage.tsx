@@ -60,7 +60,6 @@ export default function JoinPage() {
     }}>
       {/* Page identity badge */}
       <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:surface.card, color:surface.muted, marginBottom:"1.5rem", fontWeight:600 }}>
-      <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:"#1a2332", color:"#64748b", marginBottom:"1.5rem", fontWeight:600 }}>
         🏷 الانضمام إلى التحدي
       </div>
 
@@ -70,7 +69,6 @@ export default function JoinPage() {
           وصلة المعرفة
         </div>
         <div style={{ fontSize:"0.9rem", color:surface.muted, marginTop:"0.4rem" }}>
-        <div style={{ fontSize:"0.9rem", color:"#475569", marginTop:"0.4rem" }}>
           أهلًا بك في وصلة المعرفة — انضم بسرعة وابدأ التحدي
         </div>
       </div>
@@ -85,7 +83,6 @@ export default function JoinPage() {
         boxShadow: "0 25px 60px rgba(0,0,0,0.6)",
       }}>
         <h2 style={{ fontWeight:800, fontSize:"1.2rem", color:surface.text, textAlign:"center", marginBottom:"1.5rem" }}>
-        <h2 style={{ fontWeight:800, fontSize:"1.2rem", color:"#f0ede8", textAlign:"center", marginBottom:"1.5rem" }}>
           الانضمام إلى الغرفة
         </h2>
 
@@ -158,7 +155,6 @@ export default function JoinPage() {
         </div>
 
         <p style={{ textAlign:"center", fontSize:"0.78rem", color:surface.muted, marginTop:"1.25rem" }}>
-        <p style={{ textAlign:"center", fontSize:"0.78rem", color:"#475569", marginTop:"1.25rem" }}>
           اطلب رمز الانضمام من المضيف ثم أدخله هنا
         </p>
       </div>
