@@ -425,7 +425,6 @@ export default function HostView() {
     return `radial-gradient(circle at top, ${themeAccent[themeName]}33 0%, #090d18 60%)`;
   };
   const pageGradient = getPageGradient(appearance);
-  // Keep community-template parsing isolated from theme helpers to avoid try/catch corruption in merges.
       if (Array.isArray(parsed)) setCommunityTemplates(parsed);
     } catch {
       showToast.warning("تعذر قراءة قوالب المجتمع المحفوظة.");
