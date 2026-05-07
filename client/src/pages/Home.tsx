@@ -5,6 +5,14 @@ import { showToast } from "../components/KcToast";
 export default function Home() {
   const [, setLocation] = useLocation();
   const profileKey = "kc_host_profile";
+  const appearanceMode = (typeof window !== "undefined" ? localStorage.getItem("kc_appearance_mode") : null) || "dark";
+  const visualTheme = (typeof window !== "undefined" ? localStorage.getItem("kc_visual_theme") : null) || "classic";
+  const bgByMode: Record<string, string> = {
+    light: "linear-gradient(160deg,#f8fafc 0%,#eef2ff 60%,#f8fafc 100%)",
+    balanced: "linear-gradient(160deg,#f1f5f9 0%,#dbeafe 60%,#e2e8f0 100%)",
+    dark: "linear-gradient(160deg,#090d18 0%,#0f172a 60%,#090d18 100%)",
+  };
+  const accentByTheme: Record<string, string> = { classic:"#f59e0b", school:"#2563eb", space:"#22d3ee", ramadan:"#22c55e", science:"#8b5cf6", vivid:"#ef4444" };
   const raw = typeof window !== "undefined" ? localStorage.getItem(profileKey) : null;
   const parsed = raw ? JSON.parse(raw) : null;
   const [hostName, setHostName] = useState(parsed?.hostName || "");
@@ -16,11 +24,11 @@ export default function Home() {
     setLocation("/host");
   };
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:"1.25rem", background:"linear-gradient(160deg,#090d18 0%,#0f172a 60%,#090d18 100%)" }}>
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", padding:"1.25rem", background:bgByMode[appearanceMode] || bgByMode.dark }}>
       <div style={{ width:"100%", maxWidth:1040 }}>
         <div style={{ background:"#0f1623", border:"1.5px solid #1a2332", borderRadius:24, padding:"1.4rem", display:"grid", gridTemplateColumns:"1.25fr 1fr", gap:"1rem" }}>
           <div style={{ textAlign:"center", marginBottom:"1rem" }}>
-            <div style={{ fontSize:"2.2rem", color:"#f59e0b", fontWeight:900 }}>وصلة المعرفة</div>
+            <div style={{ fontSize:"2.2rem", color:accentByTheme[visualTheme] || "#f59e0b", fontWeight:900 }}>وصلة المعرفة</div>
             <div style={{ color:"#94a3b8", fontWeight:700, marginTop:"0.25rem" }}>حوّل المراجعة إلى تحدي ممتع</div>
             <div style={{ color:"#64748b", marginTop:"0.25rem" }}>منصة تحديات تعليمية تفاعلية للمضيفين والمعلمين</div>
             <div style={{ color:"#64748b", fontSize:"0.9rem", marginTop:"0.2rem" }}>أنشئ، استضف، وتحدى بطريقة ممتعة</div>

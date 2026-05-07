@@ -277,6 +277,7 @@ export default function HostView() {
   const [editingCell, setEditingCell] = useState<BoardCell | null>(null);
   const [confirmMsg, setConfirmMsg] = useState("");
   const [confirmAction, setConfirmAction] = useState<(()=>void)|null>(null);
+  const [answerActionBusy, setAnswerActionBusy] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState<StarterTemplate | null>(null);
   const [communityTemplates, setCommunityTemplates] = useState<StarterTemplate[]>([]);
   const [templateName, setTemplateName] = useState("");
@@ -284,6 +285,8 @@ export default function HostView() {
   const [templateCategory, setTemplateCategory] = useState("");
   const [templateLevel, setTemplateLevel] = useState("");
   const [presentationMode, setPresentationMode] = useState(false);
+  const [appearanceMode, setAppearanceMode] = useState<"light"|"balanced"|"dark">(((localStorage.getItem("kc_appearance_mode") as any) || "dark"));
+  const [visualTheme, setVisualTheme] = useState<string>(localStorage.getItem("kc_visual_theme") || "classic");
   const hostProfile = (() => {
     try { return JSON.parse(localStorage.getItem("kc_host_profile") || "{}"); }
     catch { return {}; }
@@ -293,6 +296,8 @@ export default function HostView() {
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
 
   useEffect(() => { roomRef.current = room; }, [room]);
+  useEffect(() => { localStorage.setItem("kc_appearance_mode", appearanceMode); }, [appearanceMode]);
+  useEffect(() => { localStorage.setItem("kc_visual_theme", visualTheme); }, [visualTheme]);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(COMMUNITY_TEMPLATES_KEY);
@@ -828,7 +833,7 @@ export default function HostView() {
   const winningPathIds = room.winnerTeam ? findWinningPath(room.board, room.gridSize, room.winnerTeam as 1|2) : [];
 
   return (
-    <div style={{ minHeight:"100vh", background:"#090d18" }}>
+    <div style={{ minHeight:"100vh", background: appearanceMode==="light" ? "#f8fafc" : appearanceMode==="balanced" ? "#e2e8f0" : "#090d18" }}>
       {/* Modals */}
       {confirmMsg && confirmAction && (
         <ConfirmModal msg={confirmMsg}
@@ -879,7 +884,7 @@ export default function HostView() {
             </div>
             <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", justifyContent:"center" }}>
               <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
-              <button className="btn-secondary" onClick={()=>setActiveTab("templates")}>الرجوع للقوالب</button>
+              <button className="btn-secondary" onClick={()=>setActiveTab("setup")}>الرجوع للقوالب</button>
             </div>
           </div>
         </div>
@@ -913,6 +918,12 @@ export default function HostView() {
               </span>
             </div>
             <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
+              <select className="kc-input" style={{ fontSize:"0.75rem", maxWidth:120 }} value={appearanceMode} onChange={e=>setAppearanceMode(e.target.value as any)}>
+                <option value="light">فاتح</option><option value="balanced">متوازن</option><option value="dark">داكن</option>
+              </select>
+              <select className="kc-input" style={{ fontSize:"0.75rem", maxWidth:120 }} value={visualTheme} onChange={e=>setVisualTheme(e.target.value)}>
+                <option value="classic">كلاسيكي</option><option value="school">مدرسي</option><option value="space">فضاء</option><option value="ramadan">رمضان</option><option value="science">علوم</option><option value="vivid">ألوان زاهية</option>
+              </select>
               {room.gameStatus==="lobby" && <button className="btn-gold" style={{ fontSize:"0.8rem" }} onClick={startGame}>▶ بدء اللعبة</button>}
               <button className="btn-danger" style={{ fontSize:"0.8rem" }} onClick={resetGame}>↺ إعادة الضبط</button>
               <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>{ localStorage.removeItem("kc_host_profile"); setLocation("/"); }}>الخروج</button>
