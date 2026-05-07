@@ -1503,10 +1503,10 @@ export default function HostView() {
             {/* Left: controls */}
             <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
               <div className="kc-card">
-                <div className="section-title">ملخص التقدم</div>
+                <div className="section-title">وضع الاستضافة</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.45rem" }}>
-                  <div className="badge-chip" style={{ borderColor:room.team1.color, color:room.team1.color }}>خلايا {room.team1.name}: {room.board.filter(c=>c.claimedBy===1).length}</div>
-                  <div className="badge-chip" style={{ borderColor:room.team2.color, color:room.team2.color }}>خلايا {room.team2.name}: {room.board.filter(c=>c.claimedBy===2).length}</div>
+                  <div className="badge-chip" style={{ borderColor:room.team1.color, color:room.team1.color }}>خلايا الفريق الأزرق: {room.board.filter(c=>c.claimedBy===1).length}</div>
+                  <div className="badge-chip" style={{ borderColor:room.team2.color, color:room.team2.color }}>خلايا الفريق الأحمر: {room.board.filter(c=>c.claimedBy===2).length}</div>
                   <div className="badge-chip">الخلايا المتبقية: {room.board.filter(c=>c.claimedBy===0).length}</div>
                   <div className="badge-chip">الأسئلة المتخطاة: {skippedCount}</div>
                   <div className="badge-chip">الدور الحالي: {room.activeTeam===1 ? room.team1.name : room.team2.name}</div>
@@ -1626,7 +1626,7 @@ export default function HostView() {
                     {/* Participant controls */}
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                       {!room.answerVisibleToParticipants
-                        ? <button className="btn-gold" style={{ fontSize:"0.8rem" }} onClick={()=>push({ answerVisibleToParticipants:true, answerVisibleToHost:true, questionStatus:"answer_revealed" })}>📢 إظهار الإجابة للمشاركين</button>
+                        ? <button className="btn-gold" style={{ fontSize:"0.8rem" }} onClick={()=>push({ answerVisibleToParticipants:true, answerVisibleToHost:true, questionStatus:"answer_revealed" })}>📢 إظهار الإجابة</button>
                         : <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>push({ answerVisibleToParticipants:false })}>🔒 إخفاء الإجابة</button>}
                       {!room.hintVisibleToParticipants
                         ? <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>push({ hintVisibleToParticipants:true })}>💡 إظهار التلميح</button>
@@ -1638,7 +1638,7 @@ export default function HostView() {
                       <button className="btn-danger" style={{ fontSize:"0.85rem" }} onClick={markWrong}>❌ إجابة خاطئة</button>
                       {room.stealMode!=="none" && <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={allowSteal}>🔄 فرصة سرقة</button>}
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={skipQ}>⏭ تخطي السؤال</button>
-                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={cancelQuestion}>❌ إلغاء السؤال الحالي</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={cancelQuestion}>✖ إغلاق</button>
                       <button className="btn-secondary" style={{ fontSize:"0.85rem" }} onClick={nextQuestion}>➡ السؤال التالي</button>
                     </div>
                   </>
