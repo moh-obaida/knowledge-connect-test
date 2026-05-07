@@ -14,6 +14,7 @@ import {
 import HexBoard from "../components/HexBoard";
 import { showToast } from "../components/KcToast";
 import { normalizeQuestion, validateQuestion } from "../lib/questionTypes";
+import { checkAnswer } from "../lib/questionTypes";
 
 // ── URL helpers ───────────────────────────────────────────────
 const BASE_URL = (import.meta.env.VITE_PUBLIC_APP_URL as string) || window.location.origin;
@@ -302,6 +303,8 @@ export default function HostView() {
   const [templateCategory, setTemplateCategory] = useState("");
   const [templateLevel, setTemplateLevel] = useState("");
   const [presentationMode, setPresentationMode] = useState(false);
+  const [hostAnswer, setHostAnswer] = useState("");
+  const [hostAnswerFeedback, setHostAnswerFeedback] = useState<string>("");
   const [appearanceMode, setAppearanceMode] = useState<"light"|"balanced"|"dark">(((localStorage.getItem("kc_appearance_mode") as any) || "dark"));
   const [visualTheme, setVisualTheme] = useState<string>(localStorage.getItem("kc_visual_theme") || "classic");
   const hostProfile = (() => {
@@ -491,7 +494,33 @@ export default function HostView() {
       }
     }
     await push({ activeQuestion:null, selectedCellId:"", questionStatus:"skipped", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
+    setHostAnswer("");
+    setHostAnswerFeedback("Question skipped");
     setAnswerActionBusy(false);
+  };
+  const verifyHostAnswer = async () => {
+    if (!room?.activeQuestion) return;
+    const q = normalizeQuestion({
+      type: (room.activeQuestion as any).type || "fill",
+      question: room.activeQuestion.question,
+      answer: room.activeQuestion.answer,
+      choices: (room.activeQuestion as any).choices || [],
+      explanation: room.activeQuestion.explanation,
+      category: room.activeQuestion.category,
+      difficulty: room.activeQuestion.difficulty,
+      letter: room.activeQuestion.cellLabel,
+    });
+    const ua = String(hostAnswer || "").trim();
+    if (!ua) { showToast.warning("Correct answer is required."); return; }
+    const r = checkAnswer(q, ua);
+    setHostAnswerFeedback(r.feedback);
+    if (r.isCorrect) {
+      showToast.success("Correct!");
+      markCorrect();
+    } else {
+      showToast.error("Wrong answer");
+      await markWrong();
+    }
   };
 
   const startTimer = () => push({ timerRunning:true });
@@ -1196,6 +1225,13 @@ export default function HostView() {
                         : <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>push({ hintVisibleToParticipants:false })}>💡 إخفاء التلميح</button>}
                     </div>
                     {/* Correct / Wrong / Steal / Skip / Next */}
+                    <div style={{ marginBottom:"0.65rem" }}>
+                      <input className="kc-input" placeholder="اكتب إجابة الفريق هنا" value={hostAnswer} onChange={e=>setHostAnswer(e.target.value)} />
+                      <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap", marginTop:"0.45rem" }}>
+                        <button className="btn-gold" style={{ fontSize:"0.82rem" }} onClick={verifyHostAnswer}>تحقق من الإجابة</button>
+                        {hostAnswerFeedback && <span style={{ fontSize:"0.78rem", color:"#94a3b8" }}>{hostAnswerFeedback}</span>}
+                      </div>
+                    </div>
                     <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
                       <button className="btn-green" style={{ fontSize:"0.85rem" }} onClick={markCorrect}>✅ إجابة صحيحة</button>
                       <button className="btn-danger" style={{ fontSize:"0.85rem" }} onClick={markWrong}>❌ إجابة خاطئة</button>
