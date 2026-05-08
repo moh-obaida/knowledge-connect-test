@@ -4,6 +4,7 @@ export const DEFAULT_LANGUAGE: Language = 'ar';
 
 const translations = {
   ar: {
+    common: { arabic: 'العربية', english: 'English', save: 'حفظ', cancel: 'إلغاء', close: 'إغلاق', yesSure: 'نعم، متأكد', areYouSure: 'هل أنت متأكد؟', notSpecified: 'غير محدد' },
     common: {
       arabic: 'العربية', english: 'English', save: 'حفظ', cancel: 'إلغاء', close: 'إغلاق',
       yesSure: 'نعم، متأكد', areYouSure: 'هل أنت متأكد؟', notSpecified: 'غير محدد'
@@ -24,6 +25,13 @@ const translations = {
     hostHeader: { title: 'وصلة المعرفة', dashboard: 'لوحة التحكم', welcome: 'مرحباً،', classActivity: 'الصف/الفعالية', organization: 'الجهة', roomCode: 'رمز الغرفة', clickToCopy: 'انقر للنسخ', appearanceMode: 'نمط المظهر', visualTheme: 'السمة البصرية', appearanceLight: 'فاتح', appearanceBalanced: 'متوازن', appearanceDark: 'داكن', themeClassic: 'كلاسيكي', themeSchool: 'مدرسي', themeSpace: 'فضاء', themeRamadan: 'رمضان', themeScience: 'علوم', themeVivid: 'زاهٍ', startGame: 'بدء اللعبة', playAgain: 'إعادة اللعب', logout: 'الخروج', copyStudentJoinLink: 'نسخ رابط انضمام الطالب', openJoinPage: 'فتح صفحة الانضمام', copyDisplayLink: 'نسخ رابط العرض', openDisplayScreen: 'فتح شاشة العرض', code: 'الرمز', joinLink: 'رابط الانضمام', displayLink: 'رابط العرض' },
   },
   en: {
+    display: { roomNotFound: 'الغرفة غير موجودة', checkRoomCode: 'تأكد من رمز الغرفة وحاول مرة أخرى.', backToHost: 'العودة إلى لوحة المضيف', turn: 'الدور', points: 'نقطة', board: 'لوحة اللعب', timer: 'المؤقت', letter: 'الحرف', true: 'صحيح', false: 'خطأ', correctAnswer: 'الإجابة الصحيحة', waitingNext: 'بانتظار اختيار الحرف التالي', roomCode: 'رمز الغرفة', participants: 'المشاركون', classroomMode: 'وضع العرض للفصل', howToJoin: 'كيف تنضم؟', step1: 'افتح صفحة الانضمام أو امسح رمز QR', step2: 'أدخل رمز الغرفة', step3: 'اكتب اسمك', step4: 'انتظر بدء التحدي' },
+    hostHeader: { title: 'وصلة المعرفة', dashboard: 'لوحة التحكم', welcome: 'مرحباً،', classActivity: 'الصف/الفعالية', organization: 'الجهة', roomCode: 'رمز الغرفة', clickToCopy: 'انقر للنسخ', appearanceMode: 'نمط المظهر', visualTheme: 'السمة البصرية', appearanceLight: 'فاتح', appearanceBalanced: 'متوازن', appearanceDark: 'داكن', themeClassic: 'كلاسيكي', themeSchool: 'مدرسي', themeSpace: 'فضاء', themeRamadan: 'رمضان', themeScience: 'علوم', themeVivid: 'زاهٍ', startGame: 'بدء اللعبة', playAgain: 'إعادة اللعب', logout: 'الخروج', copyStudentJoinLink: 'نسخ رابط انضمام الطالب', openJoinPage: 'فتح صفحة الانضمام', copyDisplayLink: 'نسخ رابط العرض', openDisplayScreen: 'فتح شاشة العرض', code: 'الرمز', joinLink: 'رابط الانضمام', displayLink: 'رابط العرض' },
+  },
+  en: {
+    common: { arabic: 'Arabic', english: 'English', save: 'Save', cancel: 'Cancel', close: 'Close', yesSure: "Yes, I'm sure", areYouSure: 'Are you sure?', notSpecified: 'Not specified' },
+  },
+  en: {
     common: {
       arabic: 'Arabic', english: 'English', save: 'Save', cancel: 'Cancel', close: 'Close',
       yesSure: 'Yes, I\'m sure', areYouSure: 'Are you sure?', notSpecified: 'Not specified'
@@ -42,6 +50,21 @@ const translations = {
     liveQuestion: { selectedLabel: 'Selected Label', noQuestions: 'No questions for this label', noQuestionsHint: 'Add a question, or pick another label to begin.', addQuestion: 'Add Question', chooseAnother: 'Choose Another Question', category: 'Category', difficulty: 'Difficulty', points: 'points', remainingForLabel: 'Remaining for this label', question: 'Question', answer: 'Answer', hint: 'Hint', revealAnswerHost: 'Reveal Answer (Host)', hideAnswer: 'Hide Answer', showToStudents: 'Show to Students', award: 'Award', skip: 'Skip Question', returnToBank: 'Return to Bank' },
     resultModal: { title: 'Result Details', code: 'Code', date: 'Date', winner: 'Winner', letters: 'Letters', totalQuestions: 'Total Questions', notAvailable: 'Not available yet', totalLetters: 'Total Letters', unusedLetters: 'Unused Letters', participants: 'Participants', participantList: 'Participants', copySummary: 'Copy Summary', exportResult: 'Export Result', deleteResult: 'Delete Result' },
     hostHeader: { title: 'Knowledge Connect', dashboard: 'Dashboard', welcome: 'Welcome,', classActivity: 'Class/Activity', organization: 'Organization', roomCode: 'Room Code', clickToCopy: 'Click to copy', appearanceMode: 'Appearance Mode', visualTheme: 'Visual Theme', appearanceLight: 'Light', appearanceBalanced: 'Balanced', appearanceDark: 'Dark', themeClassic: 'Classic', themeSchool: 'School', themeSpace: 'Space', themeRamadan: 'Ramadan', themeScience: 'Science', themeVivid: 'Vivid', startGame: 'Start Game', playAgain: 'Play Again', logout: 'Logout', copyStudentJoinLink: 'Copy student join link', openJoinPage: 'Open join page', copyDisplayLink: 'Copy display link', openDisplayScreen: 'Open display screen', code: 'Code', joinLink: 'Join Link', displayLink: 'Display Link' },
+  }
+} as const;
+    display: { roomNotFound: 'Room not found', checkRoomCode: 'Check the room code and try again.', backToHost: 'Back to host dashboard', turn: 'Turn', points: 'Points', board: 'Game Board', timer: 'Timer', letter: 'Letter', true: 'True', false: 'False', correctAnswer: 'Correct Answer', waitingNext: 'Waiting for next letter selection', roomCode: 'Room Code', participants: 'Participants', classroomMode: 'Classroom Display Mode', howToJoin: 'How to Join?', step1: 'Open the join page or scan the QR code', step2: 'Enter room code', step3: 'Type your name', step4: 'Wait for the challenge to start' },
+    hostHeader: { title: 'Knowledge Connect', dashboard: 'Dashboard', welcome: 'Welcome,', classActivity: 'Class/Activity', organization: 'Organization', roomCode: 'Room Code', clickToCopy: 'Click to copy', appearanceMode: 'Appearance Mode', visualTheme: 'Visual Theme', appearanceLight: 'Light', appearanceBalanced: 'Balanced', appearanceDark: 'Dark', themeClassic: 'Classic', themeSchool: 'School', themeSpace: 'Space', themeRamadan: 'Ramadan', themeScience: 'Science', themeVivid: 'Vivid', startGame: 'Start Game', playAgain: 'Play Again', logout: 'Logout', copyStudentJoinLink: 'Copy student join link', openJoinPage: 'Open join page', copyDisplayLink: 'Copy display link', openDisplayScreen: 'Open display screen', code: 'Code', joinLink: 'Join Link', displayLink: 'Display Link' },
+  }
+} as const;
+const listeners = new Set<() => void>(); const emit = () => listeners.forEach((l) => l());
+export function getLanguage(): Language { const raw = typeof window !== 'undefined' ? localStorage.getItem(LANGUAGE_KEY) : null; return raw === 'en' || raw === 'ar' ? raw : DEFAULT_LANGUAGE; }
+export function getDirection(language = getLanguage()) { return language === 'ar' ? 'rtl' : 'ltr'; }
+export function applyLanguage(language = getLanguage()) { if (typeof document !== 'undefined') { document.documentElement.lang = language; document.documentElement.dir = getDirection(language); } }
+export function setLanguage(language: Language) { if (typeof window !== 'undefined') localStorage.setItem(LANGUAGE_KEY, language); applyLanguage(language); emit(); }
+export function toggleLanguage() { setLanguage(getLanguage() === 'ar' ? 'en' : 'ar'); }
+export function subscribeLanguage(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
+function pick(obj: any, path: string) { return path.split('.').reduce((acc, k) => acc?.[k], obj); }
+export function t(key: string, language = getLanguage()): string { const primary = pick(translations[language], key); const fallback = pick(translations[language === 'ar' ? 'en' : 'ar'], key); const val = primary ?? fallback ?? key; if (val === undefined || val === null) return key; const s = String(val); return s === 'undefined' || s === 'null' || s === 'NaN' ? key : s; }
   }
 } as const;
 
