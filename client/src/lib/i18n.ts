@@ -5,6 +5,10 @@ export const DEFAULT_LANGUAGE: Language = 'ar';
 const translations = {
   ar: {
     common: { arabic: 'العربية', english: 'English', save: 'حفظ', cancel: 'إلغاء', close: 'إغلاق', yesSure: 'نعم، متأكد', areYouSure: 'هل أنت متأكد؟', notSpecified: 'غير محدد' },
+    common: {
+      arabic: 'العربية', english: 'English', save: 'حفظ', cancel: 'إلغاء', close: 'إغلاق',
+      yesSure: 'نعم، متأكد', areYouSure: 'هل أنت متأكد؟', notSpecified: 'غير محدد'
+    },
     app: { notFound: 'الصفحة غير موجودة' },
     home: { startNow: 'ابدأ الآن', exploreTemplates: 'استكشف القوالب', hostLogin: 'دخول المضيف', hostName: 'اسم المضيف', joinStudent: 'انضمام الطالب' },
     timer: { noTimer: 'بدون مؤقت', start: 'بدء المؤقت', pause: 'إيقاف مؤقت', resume: 'استئناف', add15: '+15 ثانية', up: 'انتهى الوقت' },
@@ -19,6 +23,12 @@ const translations = {
   },
   en: {
     common: { arabic: 'Arabic', english: 'English', save: 'Save', cancel: 'Cancel', close: 'Close', yesSure: "Yes, I'm sure", areYouSure: 'Are you sure?', notSpecified: 'Not specified' },
+  },
+  en: {
+    common: {
+      arabic: 'Arabic', english: 'English', save: 'Save', cancel: 'Cancel', close: 'Close',
+      yesSure: 'Yes, I\'m sure', areYouSure: 'Are you sure?', notSpecified: 'Not specified'
+    },
     app: { notFound: 'Page not found' },
     home: { startNow: 'Start Now', exploreTemplates: 'Explore Templates', hostLogin: 'Host Login', hostName: 'Host Name', joinStudent: 'Student Join' },
     timer: { noTimer: 'No Timer', start: 'Start Timer', pause: 'Pause', resume: 'Resume', add15: '+15 Seconds', up: 'Time is Up' },
@@ -41,4 +51,38 @@ export function toggleLanguage() { setLanguage(getLanguage() === 'ar' ? 'en' : '
 export function subscribeLanguage(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
 function pick(obj: any, path: string) { return path.split('.').reduce((acc, k) => acc?.[k], obj); }
 export function t(key: string, language = getLanguage()): string { const primary = pick(translations[language], key); const fallback = pick(translations[language === 'ar' ? 'en' : 'ar'], key); const val = primary ?? fallback ?? key; if (val === undefined || val === null) return key; const s = String(val); return s === 'undefined' || s === 'null' || s === 'NaN' ? key : s; }
+  }
+} as const;
+
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((l) => l());
+
+export function getLanguage(): Language {
+  const raw = typeof window !== 'undefined' ? localStorage.getItem(LANGUAGE_KEY) : null;
+  return raw === 'en' || raw === 'ar' ? raw : DEFAULT_LANGUAGE;
+}
+export function getDirection(language = getLanguage()) { return language === 'ar' ? 'rtl' : 'ltr'; }
+export function applyLanguage(language = getLanguage()) {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = language;
+    document.documentElement.dir = getDirection(language);
+  }
+}
+export function setLanguage(language: Language) {
+  if (typeof window !== 'undefined') localStorage.setItem(LANGUAGE_KEY, language);
+  applyLanguage(language);
+  emit();
+}
+export function toggleLanguage() { setLanguage(getLanguage() === 'ar' ? 'en' : 'ar'); }
+export function subscribeLanguage(cb: () => void) { listeners.add(cb); return () => { listeners.delete(cb); }; }
+
+function pick(obj: any, path: string) { return path.split('.').reduce((acc, k) => acc?.[k], obj); }
+export function t(key: string, language = getLanguage()): string {
+  const primary = pick(translations[language], key);
+  const fallback = pick(translations[language === 'ar' ? 'en' : 'ar'], key);
+  const val = primary ?? fallback ?? key;
+  if (val === undefined || val === null) return key;
+  const s = String(val);
+  return s === 'undefined' || s === 'null' || s === 'NaN' ? key : s;
+}
 export function getLabelForValue(group: 'qtype'|'difficulty', value: string, language = getLanguage()) { return t(`${group}.${value}`, language); }
