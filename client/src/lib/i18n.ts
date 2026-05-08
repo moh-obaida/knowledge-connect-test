@@ -40,7 +40,7 @@ export function subscribeLanguage(cb: () => void) { listeners.add(cb); return ()
 
 function pick(obj: any, path: string) { return path.split('.').reduce((acc, k) => acc?.[k], obj); }
 export function t(key: string, language = getLanguage()): string {
-  const val = pick(translations[language], key) ?? pick(translations.ar, key) ?? key;
-  return typeof val === 'string' ? val : key;
+  const val = pick(translations[language], key) ?? pick(translations.ar, key);
+  return typeof val === 'string' ? val : 'النص غير متوفر';
 }
 export function getLabelForValue(group: 'qtype'|'difficulty', value: string, language = getLanguage()) { return t(`${group}.${value}`, language); }
