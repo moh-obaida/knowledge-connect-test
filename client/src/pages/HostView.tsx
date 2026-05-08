@@ -1700,14 +1700,15 @@ export default function HostView() {
         {activeTab==="game" && (
           <>
           <div className="kc-card" style={{ marginBottom: "0.85rem", display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
-            <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginInlineEnd: "0.5rem" }}>إجراءات سريعة:</div>
+            <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginInlineEnd: "0.5rem" }}>التحكم أثناء اللعب:</div>
             <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={swapActiveTeam}>🔄 تبديل الفريق النشط</button>
             <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={undoLastAction}>↶ إلغاء آخر حركة</button>
             <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={() => { if (room) showToast.success("تم حفظ اللعبة"); }}>💾 حفظ اللعبة</button>
             <button className="btn-danger" style={{ fontSize: "0.78rem", marginInlineStart: "auto" }} onClick={endGame}>🏁 إنهاء اللعبة</button>
           </div>
           <div className="kc-card" style={{ marginBottom:"0.85rem" }}>
-            <div className="section-title">وضع اللعبة والتعزيزات</div>
+            <div className="section-title">إعداد اللعبة</div>
+            <div style={{ fontSize:"0.78rem", color:"#94a3b8", marginBottom:"0.45rem" }}>وضع اللعبة والتعزيزات</div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"0.5rem", marginBottom:"0.55rem" }}>
               <select className="kc-input" value={gameMode} onChange={e=>push({ gameMode: e.target.value as any })}>
                 <option value="classic">التحدي الكلاسيكي</option><option value="speed">وضع السرعة</option><option value="points">وضع النقاط</option><option value="connection">وضع الوصلة</option><option value="teacher">وضع المعلم</option><option value="training">وضع التدريب</option>
@@ -1723,7 +1724,8 @@ export default function HostView() {
             {!presentationMode && <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
               {/* Teams */}
               <div className="kc-card">
-                <div className="section-title">الفرق</div>
+                <div className="section-title">النقاط والمؤقت</div>
+                <div style={{ fontSize:"0.78rem", color:"#94a3b8", marginBottom:"0.45rem" }}>الفرق</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem" }}>
                   {([1,2] as const).map(t=>{
                     const team = t===1 ? room.team1 : room.team2;
@@ -1877,7 +1879,10 @@ export default function HostView() {
             {/* Right: Board */}
             <div className="kc-card">
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.5rem", flexWrap:"wrap" }}>
-                <div className="section-title">{presentationMode ? "وضع العرض" : "وضع الاستضافة"}</div>
+                <div>
+                  <div className="section-title">لوحة الحروف</div>
+                  <div style={{ fontSize:"0.76rem", color:"#94a3b8" }}>{presentationMode ? "وضع العرض" : "وضع الاستضافة"}</div>
+                </div>
                 <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
                   <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>setPresentationMode(v=>!v)}>{presentationMode ? "الخروج من وضع العرض" : "وضع العرض"}</button>
                   <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>window.open(`/display?room=${roomCode}`,"_blank","noopener")}>📺 شاشة العرض الكاملة</button>
