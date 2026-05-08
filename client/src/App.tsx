@@ -4,6 +4,7 @@ import HostView from "./pages/HostView";
 import JoinPage from "./pages/JoinPage";
 import ParticipantView from "./pages/ParticipantView";
 import Home from "./pages/Home";
+import DisplayMode from "./pages/DisplayMode";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/host" component={HostView} />
         <Route path="/join" component={JoinPage} />
         <Route path="/participant" component={ParticipantView} />
+        <Route path="/display" component={DisplayMode} />
         <Route>
           <div className="min-h-screen flex items-center justify-center text-center p-8">
             <div>

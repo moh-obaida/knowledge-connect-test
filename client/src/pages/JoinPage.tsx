@@ -14,29 +14,35 @@ export default function JoinPage() {
   const [roomCode, setRoomCode] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>("");
 
   // Auto-fill room code from URL ?room=XXXXXX
   useEffect(() => {
     const codeFromUrl = getParam("room");
-    if (codeFromUrl) setRoomCode(codeFromUrl);
+    if (codeFromUrl) setRoomCode(codeFromUrl.replace(/\D/g, "").slice(0, 6));
+    const savedName = typeof window !== "undefined" ? localStorage.getItem("kc_player_name") : "";
+    if (savedName) setPlayerName(savedName);
   }, []);
 
   const handleJoin = async () => {
     const code = roomCode.trim();
     const name = playerName.trim();
-    if (!code || code.length !== 6) { showToast.error("تنسيق الملف غير صالح."); return; }
-    if (!name) { showToast.error("يرجى إدخال الاسم."); return; }
-    if (!isFirebaseConfigured()) { showToast.error("تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا. راجع ملف التعليمات أو تواصل مع المسؤول"); return; }
+    setError("");
+    if (!code) { setError("يرجى إدخال رمز الغرفة."); showToast.error("يرجى إدخال رمز الغرفة."); return; }
+    if (code.length !== 6) { setError("رمز الغرفة يجب أن يتكون من ٦ أرقام."); showToast.error("رمز الغرفة يجب أن يتكون من ٦ أرقام."); return; }
+    if (!name) { setError("يرجى إدخال الاسم."); showToast.error("يرجى إدخال الاسم."); return; }
+    if (!isFirebaseConfigured()) { setError("تعذر الاتصال بالخدمة."); showToast.error("تعذر الاتصال بالخدمة. يرجى المحاولة لاحقًا."); return; }
     setLoading(true);
     try {
       const playerId = `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
       const joined = await joinRoom(code, playerId, name);
-      if (!joined) { showToast.error("تعذر الاتصال بالغرفة. تحقق من الرمز وحاول مرة أخرى."); setLoading(false); return; }
+      if (!joined) { setError("الغرفة غير موجودة. تأكد من الرمز."); showToast.error("تعذر الاتصال بالغرفة. تحقق من الرمز وحاول مرة أخرى."); setLoading(false); return; }
       localStorage.setItem("kc_player_id", playerId);
       localStorage.setItem("kc_player_name", name);
       setLocation(`/participant?room=${code}&name=${encodeURIComponent(name)}`);
     } catch (e) {
       console.error(e);
+      setError("حدث خطأ أثناء الانضمام — تحقق من الاتصال بالإنترنت.");
       showToast.error("حدث خطأ أثناء الانضمام — تحقق من الاتصال بالإنترنت");
     }
     setLoading(false);
@@ -53,17 +59,20 @@ export default function JoinPage() {
       background: "linear-gradient(160deg,#090d18 0%,#0f172a 60%,#090d18 100%)",
     }}>
       {/* Page identity badge */}
-      <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:"#1a2332", color:"#64748b", marginBottom:"1.5rem", fontWeight:600 }}>
-        🏷 الانضمام إلى التحدي
+      <div style={{ fontSize:"0.72rem", padding:"0.25rem 0.75rem", borderRadius:"9999px", background:"#1a2332", color:"#cbd5e1", marginBottom:"1.25rem", fontWeight:600 }}>
+        🏷 انضم إلى التحدي
       </div>
 
       {/* Logo */}
-      <div style={{ marginBottom:"2rem", textAlign:"center" }}>
-        <div style={{ fontSize:"3.5rem", fontWeight:900, color:"#f59e0b", fontFamily:"Cairo,sans-serif", lineHeight:1.1 }}>
+      <div style={{ marginBottom:"1.5rem", textAlign:"center" }}>
+        <div style={{ fontSize:"clamp(2.4rem, 8vw, 3.5rem)", fontWeight:900, color:"#f59e0b", fontFamily:"Cairo,sans-serif", lineHeight:1.1 }}>
           وصلة المعرفة
         </div>
-        <div style={{ fontSize:"0.9rem", color:"#475569", marginTop:"0.4rem" }}>
-          أهلًا بك في وصلة المعرفة — انضم بسرعة وابدأ التحدي
+        <div style={{ fontSize:"1rem", fontWeight:700, color:"#cbd5e1", marginTop:"0.5rem" }}>
+          انضم إلى التحدي
+        </div>
+        <div style={{ fontSize:"0.85rem", color:"#94a3b8", marginTop:"0.3rem" }}>
+          أدخل رمز الغرفة الذي شاركه معك المضيف ثم اكتب اسمك.
         </div>
       </div>
 
@@ -128,6 +137,13 @@ export default function JoinPage() {
             />
           </div>
 
+          {/* Inline error */}
+          {error && (
+            <div role="alert" style={{ background:"rgba(239,68,68,0.1)", border:"1.5px solid rgba(239,68,68,0.35)", color:"#fca5a5", borderRadius:"10px", padding:"0.55rem 0.75rem", fontSize:"0.85rem" }}>
+              {error}
+            </div>
+          )}
+
           {/* Join button */}
           <button
             onClick={handleJoin}
@@ -144,18 +160,32 @@ export default function JoinPage() {
             onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLButtonElement).style.transform="translateY(-2px)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.transform="translateY(0)"; }}
           >
-            {loading ? "جارٍ الانضمام..." : "انضمام الطالب"}
+            {loading ? "جارٍ الانضمام..." : "انضمام إلى التحدي"}
           </button>
         </div>
 
-        <p style={{ textAlign:"center", fontSize:"0.78rem", color:"#475569", marginTop:"1.25rem" }}>
-          اطلب رمز الانضمام من المضيف ثم أدخله هنا
+        <p style={{ textAlign:"center", fontSize:"0.78rem", color:"#475569", marginTop:"1rem" }}>
+          اطلب رمز الانضمام من المضيف ثم أدخله هنا.
         </p>
       </div>
 
+      {/* How to join card */}
+      <div style={{
+        width:"100%", maxWidth: 380, marginTop:"1rem",
+        background:"#0f1623", border:"1px solid #1a2332",
+        borderRadius:"16px", padding:"1rem 1.1rem",
+      }}>
+        <div style={{ fontWeight:700, color:"#f59e0b", fontSize:"0.82rem", marginBottom:"0.4rem" }}>كيف تنضم؟</div>
+        <ol style={{ listStyle:"decimal", color:"#cbd5e1", fontSize:"0.84rem", lineHeight:1.95, paddingInlineStart:"1.2rem" }}>
+          <li>احصل على رمز الغرفة (٦ أرقام) من المضيف.</li>
+          <li>أدخل الرمز ثم اكتب اسمك.</li>
+          <li>اضغط على "انضمام إلى التحدي" وانتظر بدء المضيف.</li>
+        </ol>
+      </div>
+
       {/* Host link */}
-      <div style={{ marginTop:"2rem", textAlign:"center" }}>
-        <a href="/" style={{ fontSize:"0.85rem", color:"#475569", textDecoration:"none" }}>
+      <div style={{ marginTop:"1.4rem", textAlign:"center" }}>
+        <a href="/" style={{ fontSize:"0.85rem", color:"#94a3b8", textDecoration:"none" }}>
           هل أنت المضيف؟{" "}
           <span style={{ color:"#f59e0b", fontWeight:700 }}>العودة إلى لوحة التحكم</span>
         </a>

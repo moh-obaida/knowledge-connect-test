@@ -17,6 +17,11 @@ import { normalizeQuestion, validateQuestion } from "../lib/questionTypes";
 import { checkAnswer } from "../lib/questionTypes";
 import HostDashboardHeader from "../components/host/HostDashboardHeader";
 import TemplatePreviewModal from "../components/host/TemplatePreviewModal";
+import HostLobbyCard from "../components/host/HostLobbyCard";
+import JoinQRCard from "../components/host/JoinQRCard";
+import ResultPreviewModal from "../components/host/ResultPreviewModal";
+import LiveQuestionModal from "../components/host/LiveQuestionModal";
+import { saveGameResult, loadGameResults, deleteGameResult, exportResultsJSON, exportResultsCSV, summarizeResult, aggregateResults, type GameResult } from "../lib/gameResults";
 
 // ── URL helpers ───────────────────────────────────────────────
 const BASE_URL = (import.meta.env.VITE_PUBLIC_APP_URL as string) || window.location.origin;
@@ -46,29 +51,35 @@ function ConfirmModal({ msg, onYes, onNo }: { msg: string; onYes: () => void; on
 }
 
 // ── Cell question editor ──────────────────────────────────────
+type QType = "fill" | "mcq" | "tf";
+const TF_OPTIONS = ["صحيح", "خطأ"] as const;
 function CellEditor({ cell, onSave, onClose }: {
   cell: BoardCell; onSave: (u: Partial<BoardCell>) => void; onClose: () => void;
 }) {
-  type BankQ = { question:string; answer:string; category:string; difficulty: BoardCell["difficulty"]; points:number; hint:string; explanation:string };
+  type BankQ = { type: QType; question:string; answer:string; choices?: string[]; category:string; difficulty: BoardCell["difficulty"]; points:number; hint:string; explanation:string };
   const normalized = (): BankQ[] => {
     const arr = Array.isArray((cell as any).questionBank) ? (cell as any).questionBank : [];
     const mapped = arr.filter((x:any)=>x?.question).map((x:any)=>({
+      type: (x.type === "mcq" || x.type === "tf") ? x.type : "fill",
       question: String(x.question||"").trim(),
       answer: String(x.answer||"").trim(),
+      choices: Array.isArray(x.choices) ? x.choices.map((c:any)=>String(c||"").trim()).filter(Boolean) : undefined,
       category: String(x.category||"غير مصنف").trim() || "غير مصنف",
       difficulty: (x.difficulty==="easy"||x.difficulty==="medium"||x.difficulty==="hard") ? x.difficulty : "medium",
       points: Number(x.points)||1,
       hint: String(x.hint||""),
       explanation: String(x.explanation||""),
-    }));
+    })) as BankQ[];
     if (mapped.length) return mapped;
-    if (cell.question.trim()) return [{ question:cell.question, answer:cell.answer, category:cell.category||"غير مصنف", difficulty:cell.difficulty, points:cell.points||1, hint:cell.hint||"", explanation:cell.explanation||"" }];
+    if (cell.question.trim()) return [{ type:"fill", question:cell.question, answer:cell.answer, category:cell.category||"غير مصنف", difficulty:cell.difficulty, points:cell.points||1, hint:cell.hint||"", explanation:cell.explanation||"" }];
     return [];
   };
   const [questionBank, setQuestionBank] = useState<BankQ[]>(normalized());
   const [editingIndex, setEditingIndex] = useState<number>(-1);
+  const [type, setType] = useState<QType>("fill");
   const [q, setQ] = useState(cell.question);
   const [a, setA] = useState(cell.answer);
+  const [choices, setChoices] = useState<string[]>(["", "", "", ""]);
   const [cat, setCat] = useState(cell.category);
   const [diff, setDiff] = useState(cell.difficulty);
   const [pts, setPts] = useState(cell.points);
@@ -77,13 +88,26 @@ function CellEditor({ cell, onSave, onClose }: {
 
   const save = () => {
     if (!q.trim()) { showToast.error("نص السؤال مطلوب"); return; }
-    if (!a.trim()) { showToast.error("الإجابة الصحيحة مطلوبة"); return; }
-    const firstAnswerChar = a.trim().charAt(0);
-    if (firstAnswerChar && firstAnswerChar !== cell.label) {
-      showToast.warning("تنبيه: الإجابة لا تبدأ بالحرف المحدد.");
+    let answerToSave = a.trim();
+    let choicesToSave: string[] | undefined;
+    if (type === "mcq") {
+      const cleanChoices = choices.map((c) => c.trim()).filter(Boolean);
+      if (cleanChoices.length < 2) { showToast.error("اختيار من متعدد يحتاج خيارَين على الأقل"); return; }
+      if (!answerToSave) { showToast.error("اختر الإجابة الصحيحة من الخيارات"); return; }
+      if (!cleanChoices.includes(answerToSave)) { showToast.error("الإجابة الصحيحة يجب أن تطابق أحد الخيارات"); return; }
+      choicesToSave = cleanChoices;
+    } else if (type === "tf") {
+      if (!TF_OPTIONS.includes(answerToSave as any)) { showToast.error("اختر الإجابة: صحيح أو خطأ"); return; }
+      choicesToSave = [...TF_OPTIONS];
+    } else {
+      if (!answerToSave) { showToast.error("الإجابة الصحيحة مطلوبة"); return; }
+      const firstAnswerChar = answerToSave.charAt(0);
+      if (firstAnswerChar && firstAnswerChar !== cell.label) {
+        showToast.warning("تنبيه: الإجابة لا تبدأ بالحرف المحدد.");
+      }
     }
     const next = [...questionBank];
-    const payload = { question: q.trim(), answer: a.trim(), category: (cat.trim()||"غير مصنف"), difficulty: diff, points: Number(pts)||1, hint: hint.trim(), explanation: expl.trim() } as BankQ;
+    const payload: BankQ = { type, question: q.trim(), answer: answerToSave, choices: choicesToSave, category: (cat.trim()||"غير مصنف"), difficulty: diff, points: Number(pts)||1, hint: hint.trim(), explanation: expl.trim() };
     if (editingIndex >= 0) next[editingIndex] = payload;
     else {
       if (next.length >= 50) { showToast.warning("وصلت إلى الحد الأقصى لهذا الحرف: 50 سؤالًا."); return; }
@@ -91,8 +115,28 @@ function CellEditor({ cell, onSave, onClose }: {
     }
     setQuestionBank(next);
     setEditingIndex(next.length-1);
-    onSave({ question: next[0].question, answer: next[0].answer, category: next[0].category, difficulty: next[0].difficulty, points: next[0].points, hint: next[0].hint, explanation: next[0].explanation, ...( { questionBank: next } as any) });
+    const first = next[0];
+    onSave({ question: first.question, answer: first.answer, category: first.category, difficulty: first.difficulty, points: first.points, hint: first.hint, explanation: first.explanation, ...( { questionBank: next } as any) });
     showToast.success("تم حفظ السؤال");
+  };
+
+  const loadEditing = (item: BankQ, idx: number) => {
+    setEditingIndex(idx);
+    setType(item.type || "fill");
+    setQ(item.question);
+    setA(item.answer);
+    const c = item.choices || [];
+    if (item.type === "mcq") {
+      const padded = [...c, "", "", "", ""].slice(0, 4);
+      setChoices(padded);
+    } else {
+      setChoices(["", "", "", ""]);
+    }
+    setCat(item.category);
+    setDiff(item.difficulty);
+    setPts(item.points);
+    setHint(item.hint);
+    setExpl(item.explanation);
   };
 
   return (
@@ -109,22 +153,86 @@ function CellEditor({ cell, onSave, onClose }: {
             <div style={{ display:"flex", flexDirection:"column", gap:"0.3rem", maxHeight:130, overflowY:"auto" }}>
               {questionBank.map((item, i)=>(
                 <div key={i} style={{ display:"flex", gap:"0.35rem", alignItems:"center" }}>
-                  <button className="btn-secondary" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>{ setEditingIndex(i); setQ(item.question); setA(item.answer); setCat(item.category); setDiff(item.difficulty); setPts(item.points); setHint(item.hint); setExpl(item.explanation); }}>تعديل</button>
+                  <button className="btn-secondary" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>loadEditing(item, i)}>تعديل</button>
                   <button className="btn-danger" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>{ const next=questionBank.filter((_,ix)=>ix!==i); setQuestionBank(next); const first=next[0]; onSave(first?{ question:first.question, answer:first.answer, category:first.category, difficulty:first.difficulty, points:first.points, hint:first.hint, explanation:first.explanation, ...( { questionBank: next } as any)}:{ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"", ...( { questionBank: [] } as any)}); }}>حذف</button>
+                  <span style={{ fontSize:"0.65rem", padding:"0.1rem 0.4rem", borderRadius:9999, background:"#0f1623", color:"#94a3b8" }}>
+                    {item.type === "mcq" ? "اختيار من متعدد" : item.type === "tf" ? "صح/خطأ" : "إجابة قصيرة"}
+                  </span>
                   <div style={{ fontSize:"0.75rem", color:"#cbd5e1", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.question}</div>
                 </div>
               ))}
             </div>
-            <button className="btn-gold" style={{ fontSize:"0.72rem", marginTop:"0.45rem" }} onClick={()=>{ setEditingIndex(-1); setQ(""); setA(""); setCat("غير مصنف"); setDiff("medium"); setPts(1); setHint(""); setExpl(""); }}>إضافة سؤال لهذا الحرف</button>
+            <button className="btn-gold" style={{ fontSize:"0.72rem", marginTop:"0.45rem" }} onClick={()=>{ setEditingIndex(-1); setType("fill"); setQ(""); setA(""); setChoices(["","","",""]); setCat("غير مصنف"); setDiff("medium"); setPts(1); setHint(""); setExpl(""); }}>إضافة سؤال لهذا الحرف</button>
+          </div>
+          <div>
+            <label style={lbl}>نوع السؤال</label>
+            <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
+              {([
+                { v: "fill", l: "إجابة قصيرة" },
+                { v: "mcq", l: "اختيار من متعدد" },
+                { v: "tf", l: "صح أو خطأ" },
+              ] as const).map(opt => (
+                <button key={opt.v} type="button"
+                  onClick={()=>{
+                    setType(opt.v);
+                    if (opt.v === "tf") setA((prev) => (TF_OPTIONS.includes(prev as any) ? prev : ""));
+                    if (opt.v === "mcq" && !choices.some(Boolean)) setChoices(["","","",""]);
+                  }}
+                  className={type === opt.v ? "btn-gold" : "btn-secondary"}
+                  style={{ fontSize:"0.78rem", padding:"0.35rem 0.7rem" }}
+                >{opt.l}</button>
+              ))}
+            </div>
           </div>
           <div>
             <label style={lbl}>نص السؤال *</label>
             <textarea value={q} onChange={e=>setQ(e.target.value)} rows={3} placeholder="اكتب نص السؤال هنا..." className="kc-input" style={{ resize:"vertical" }} />
           </div>
-          <div>
-            <label style={lbl}>الإجابة الصحيحة *</label>
-            <input value={a} onChange={e=>setA(e.target.value)} placeholder="اكتب الإجابة الصحيحة هنا..." className="kc-input" />
-          </div>
+          {type === "mcq" && (
+            <div>
+              <label style={lbl}>الخيارات *</label>
+              <div style={{ display:"flex", flexDirection:"column", gap:"0.4rem" }}>
+                {choices.map((c, i) => (
+                  <div key={i} style={{ display:"flex", gap:"0.4rem", alignItems:"center" }}>
+                    <span style={{ fontSize:"0.72rem", color:"#94a3b8", minWidth:18 }}>{String.fromCharCode(65 + i)}.</span>
+                    <input
+                      value={c}
+                      onChange={e => setChoices(prev => prev.map((p, ix) => ix === i ? e.target.value : p))}
+                      placeholder={`الخيار ${i+1}`}
+                      className="kc-input"
+                    />
+                    <button type="button" className={a && a === c.trim() && c.trim() !== "" ? "btn-green" : "btn-secondary"} style={{ fontSize:"0.68rem", padding:"0.25rem 0.55rem" }}
+                      onClick={() => { const v = c.trim(); if (v) setA(v); }}
+                      disabled={!c.trim()}
+                    >
+                      {a && a === c.trim() && c.trim() !== "" ? "✓ صحيحة" : "اختر صحيحة"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize:"0.72rem", color:"#94a3b8", marginTop:"0.4rem" }}>الإجابة الصحيحة الحالية: <strong style={{ color:"#f59e0b" }}>{a || "—"}</strong></div>
+            </div>
+          )}
+          {type === "tf" && (
+            <div>
+              <label style={lbl}>الإجابة الصحيحة *</label>
+              <div style={{ display:"flex", gap:"0.5rem" }}>
+                {TF_OPTIONS.map(opt => (
+                  <button key={opt} type="button"
+                    className={a === opt ? "btn-gold" : "btn-secondary"}
+                    style={{ flex:1 }}
+                    onClick={() => setA(opt)}
+                  >{opt}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {type === "fill" && (
+            <div>
+              <label style={lbl}>الإجابة الصحيحة *</label>
+              <input value={a} onChange={e=>setA(e.target.value)} placeholder="اكتب الإجابة الصحيحة هنا..." className="kc-input" />
+            </div>
+          )}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem" }}>
             <div>
               <label style={lbl}>التصنيف</label>
@@ -243,6 +351,8 @@ const STARTER_TEMPLATES: StarterTemplate[] = [
   { id:"tpl_arabic", name:"قالب اللغة العربية", categories:["اللغة العربية"], level:"متوسط", description:"مفردات وحروف وفهم لغوي للمرحلة الأساسية.", questions:["اختر كلمة تبدأ بحرف الألف.","ما الحرف الأول في كلمة: باب؟","أي كلمة تحتوي على حرف السين؟","اختر كلمة تنتهي بحرف النون.","ما مرادف كلمة منزل؟"] },
   { id:"tpl_science", name:"قالب العلوم", categories:["العلوم"], level:"متوسط", description:"مراجعة سريعة لمفاهيم علمية عامة.", questions:["ما الكوكب الذي نعيش عليه؟","ما العضو الذي نستخدمه للرؤية؟","ما لون السماء في النهار؟","ما الحيوان الذي يعطينا الحليب؟","ما وسيلة النقل التي تطير في السماء؟"] },
   { id:"tpl_quick_review", name:"قالب مراجعة سريعة", categories:["مراجعة عامة"], level:"متوسط", description:"قالب متوازن للمراجعة قبل الاختبار.", questions:["ما أول أركان الإسلام؟","ما ناتج ٣ + ٤؟","ما الحرف الأول في كلمة: وردة؟","كم يومًا في الأسبوع؟","أكمل النمط: ٢، ٤، ٦، __"] },
+  { id:"tpl_values", name:"قالب القيم والأخلاق", categories:["القيم والأخلاق"], level:"سهل", description:"قالب يركز على الأخلاق والقيم الإيجابية والسلوك المدرسي.", questions:["ما أهمية احترام المعلم؟","لماذا نحافظ على نظافة المدرسة؟","ما القيمة التي تظهر عند مساعدة الزملاء؟","ما الفرق بين الصدق والكذب؟","كيف نتعامل مع الأخطاء بأدب؟"] },
+  { id:"tpl_vocab", name:"قالب المفردات", categories:["مفردات","اللغة العربية"], level:"متوسط", description:"قالب لتدريب الطلاب على المفردات والمعاني.", questions:["ما مرادف كلمة سعيد؟","ما عكس كلمة كبير؟","اختر كلمة تنتهي بتاء مربوطة.","ضع كلمة مدرسة في جملة مفيدة.","ما جمع كلمة كتاب؟"] },
   { id:"tpl_empty_teacher", name:"قالب فارغ للمعلم", categories:["غير مصنف"], level:"متوسط", description:"قالب فارغ مخصص لبناء لعبة من الصفر.", questions:[] },
 ];
 
@@ -323,6 +433,11 @@ export default function HostView() {
   const unsubRef = useRef<(()=>void)|null>(null);
   const roomRef = useRef<RoomState|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval>|null>(null);
+  const savedResultRef = useRef<Set<string>>(new Set());
+  const [savedResults, setSavedResults] = useState<GameResult[]>(() => (typeof window !== "undefined" ? loadGameResults() : []));
+  const [previewResult, setPreviewResult] = useState<GameResult | null>(null);
+  const [liveCellId, setLiveCellId] = useState<string>("");
+  const undoStackRef = useRef<Array<{ type: "claim"; cellId: string; team: 1 | 2; points: number; previousActiveTeam: 1 | 2 }>>([]);
 
   useEffect(() => { roomRef.current = room; }, [room]);
   useEffect(() => { localStorage.setItem("kc_appearance_mode", appearanceMode); }, [appearanceMode]);
@@ -410,15 +525,23 @@ export default function HostView() {
     if (room.gameStatus === "lobby" || activeTab === "setup") {
       setEditingCell(cell);
     } else {
-      if (!cellHasQuestions(cell)) { showToast.warning("لا يوجد سؤال مرتبط بهذا الحرف حالياً."); return; }
       if (cell.claimedBy !== 0) { showToast.info("هذا الحرف محجوز بالفعل."); return; }
+      setLiveCellId(cell.id);
+      if (!cellHasQuestions(cell)) {
+        push({ activeQuestion: null, selectedCellId: cell.id, questionStatus: "idle" });
+        return;
+      }
       const bank = Array.isArray((cell as any).questionBank) && (cell as any).questionBank.length ? (cell as any).questionBank : [{ question: cell.question, answer: cell.answer, category: cell.category, difficulty: cell.difficulty, points: cell.points, hint: cell.hint, explanation: cell.explanation }];
       const first = bank[0];
+      const fType = (first?.type === "mcq" || first?.type === "tf") ? first.type : "fill";
+      const fChoices = fType === "mcq" && Array.isArray(first?.choices) ? first.choices.filter((c:any)=>typeof c === "string") : fType === "tf" ? ["صحيح","خطأ"] : undefined;
       const aq: ActiveQuestion = {
         cellId: cell.id, cellLabel: cell.label,
         question: first.question, answer: first.answer,
         category: first.category, difficulty: first.difficulty,
         points: first.points, hint: first.hint, explanation: first.explanation,
+        type: fType,
+        ...(fChoices ? { choices: fChoices } : {}),
       };
       push({
         activeQuestion: aq, selectedCellId: cell.id,
@@ -438,24 +561,90 @@ export default function HostView() {
   };
 
   // Claim cell
-  const claimCell = async (cellId: string) => {
+  const claimCell = async (cellId: string, forTeam?: 1 | 2) => {
     if (!room || answerActionBusy) return;
     const current = room.board.find(c => c.id===cellId);
     if (!current || current.claimedBy !== 0 || current.used || room.gameStatus === "finished") return;
     setAnswerActionBusy(true);
-    const nb = room.board.map(c => c.id===cellId ? {...c, claimedBy: room.activeTeam as 0|1|2, used:true} : c);
+    const team = (forTeam || room.activeTeam) as 1 | 2;
+    const nb = room.board.map(c => c.id===cellId ? {...c, claimedBy: team, used:true} : c);
     const pts = room.activeQuestion?.points || 1;
-    const scoreUp = room.activeTeam===1 ? { team1Score: room.team1Score+pts } : { team2Score: room.team2Score+pts };
+    const scoreUp = team===1 ? { team1Score: room.team1Score+pts } : { team2Score: room.team2Score+pts };
+    undoStackRef.current.push({ type: "claim", cellId, team, points: pts, previousActiveTeam: room.activeTeam });
     const winner = checkWinner(nb, room.gridSize);
-    const winMsg = winner===1 ? "فاز الفريق الأزرق!" : winner===2 ? "فاز الفريق الأحمر!" : "";
+    const winMsg = winner===1 ? `فاز ${room.team1.name}!` : winner===2 ? `فاز ${room.team2.name}!` : "";
     await push({ board:nb, ...scoreUp, questionStatus:"correct", selectedCellId:"",
       winnerMessage: winMsg, winnerTeam: winner,
       gameStatus: winMsg ? "finished" : room.gameStatus });
-    if (winMsg) showToast.success(winMsg);
+    if (winMsg) {
+      showToast.success(winMsg);
+      try {
+        const finishedRoom: RoomState = { ...room, board: nb, ...scoreUp, winnerTeam: winner, winnerMessage: winMsg, gameStatus: "finished" } as RoomState;
+        const dedupeKey = `${finishedRoom.roomCode}-${winner}-${finishedRoom.team1Score}-${finishedRoom.team2Score}`;
+        if (!savedResultRef.current.has(dedupeKey)) {
+          saveGameResult(finishedRoom);
+          savedResultRef.current.add(dedupeKey);
+          setSavedResults(loadGameResults());
+        }
+      } catch { /* ignore */ }
+    }
     setAnswerActionBusy(false);
   };
 
   const markCorrect = () => { if (room?.activeQuestion && !answerActionBusy) claimCell(room.activeQuestion.cellId); };
+  const markCorrectForTeam = (team: 1 | 2) => { if (room?.activeQuestion && !answerActionBusy) claimCell(room.activeQuestion.cellId, team); };
+
+  const swapActiveTeam = () => {
+    if (!room) return;
+    const next: 1 | 2 = room.activeTeam === 1 ? 2 : 1;
+    push({ activeTeam: next });
+    showToast.info(`الدور انتقل إلى ${next === 1 ? room.team1.name : room.team2.name}`);
+  };
+
+  const undoLastAction = async () => {
+    if (!room) return;
+    const last = undoStackRef.current.pop();
+    if (!last) { showToast.info("لا توجد حركة لإلغائها"); return; }
+    if (last.type === "claim") {
+      const nb = room.board.map(c => c.id === last.cellId ? { ...c, claimedBy: 0 as const, used: false } : c);
+      const scoreFix = last.team === 1
+        ? { team1Score: Math.max(0, room.team1Score - last.points) }
+        : { team2Score: Math.max(0, room.team2Score - last.points) };
+      await push({
+        board: nb,
+        ...scoreFix,
+        winnerMessage: "",
+        winnerTeam: 0,
+        gameStatus: room.gameStatus === "finished" ? "active" : room.gameStatus,
+        questionStatus: "idle",
+        activeTeam: last.previousActiveTeam,
+      });
+      savedResultRef.current.clear();
+      showToast.success("تم التراجع عن الحركة الأخيرة");
+    }
+  };
+
+  const endGame = () => {
+    if (!room) return;
+    confirm("هل تريد إنهاء اللعبة الآن؟ سيتم حفظ النتيجة الحالية.", async () => {
+      const t1 = room.team1Score;
+      const t2 = room.team2Score;
+      const winner: 0 | 1 | 2 = t1 > t2 ? 1 : t2 > t1 ? 2 : 0;
+      const msg = winner === 1 ? `🏆 ${room.team1.name} فاز!` : winner === 2 ? `🏆 ${room.team2.name} فاز!` : "🤝 تعادل!";
+      await push({ winnerMessage: msg, winnerTeam: winner, gameStatus: "finished" });
+      try {
+        const finishedRoom: RoomState = { ...room, winnerTeam: winner, winnerMessage: msg, gameStatus: "finished" } as RoomState;
+        const dedupeKey = `${finishedRoom.roomCode}-${winner}-${finishedRoom.team1Score}-${finishedRoom.team2Score}`;
+        if (!savedResultRef.current.has(dedupeKey)) {
+          saveGameResult(finishedRoom);
+          savedResultRef.current.add(dedupeKey);
+          setSavedResults(loadGameResults());
+        }
+      } catch { /* ignore */ }
+      showToast.success("تم إنهاء اللعبة وحفظ النتيجة");
+    });
+  };
+
   const markWrong = async () => {
     if (!room) return;
     await push({ questionStatus:"wrong" });
@@ -475,8 +664,10 @@ export default function HostView() {
       const idx = Math.max(0, bank.findIndex((q:any)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
       const next = bank[idx+1];
       if (next) {
+        const nType = (next.type === "mcq" || next.type === "tf") ? next.type : "fill";
+        const nChoices = nType === "mcq" && Array.isArray(next.choices) ? next.choices.filter((c:any)=>typeof c === "string") : nType === "tf" ? ["صحيح","خطأ"] : undefined;
         await push({
-          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "" },
+          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "", type: nType, ...(nChoices ? { choices: nChoices } : { choices: [] }) },
           answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
           questionStatus:"active", timerRunning:false, timerValue: room.timerSetting,
         });
@@ -494,8 +685,10 @@ export default function HostView() {
       const idx = Math.max(0, bank.findIndex((q:any)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
       const next = bank[idx+1];
       if (next) {
+        const nType = (next.type === "mcq" || next.type === "tf") ? next.type : "fill";
+        const nChoices = nType === "mcq" && Array.isArray(next.choices) ? next.choices.filter((c:any)=>typeof c === "string") : nType === "tf" ? ["صحيح","خطأ"] : undefined;
         await push({
-          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "" },
+          activeQuestion: { ...room.activeQuestion, question: next.question, answer: next.answer, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "", type: nType, ...(nChoices ? { choices: nChoices } : { choices: [] }) },
           answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
           questionStatus:"skipped", timerRunning:false, timerValue: room.timerSetting,
         });
@@ -544,7 +737,17 @@ export default function HostView() {
   const declareWinner = (t: 1|2|"draw") => {
     if (!room) return;
     const msg = t==="draw" ? "🤝 تعادل!" : t===1 ? `🏆 ${room.team1.name} فاز!` : `🏆 ${room.team2.name} فاز!`;
-    push({ winnerMessage:msg, winnerTeam: t==="draw" ? 0 : t, gameStatus:"finished" });
+    const winnerTeam: 0|1|2 = t==="draw" ? 0 : t;
+    push({ winnerMessage:msg, winnerTeam, gameStatus:"finished" });
+    try {
+      const finishedRoom: RoomState = { ...room, winnerTeam, winnerMessage: msg, gameStatus: "finished" } as RoomState;
+      const dedupeKey = `${finishedRoom.roomCode}-${winnerTeam}-${finishedRoom.team1Score}-${finishedRoom.team2Score}`;
+      if (!savedResultRef.current.has(dedupeKey)) {
+        saveGameResult(finishedRoom);
+        savedResultRef.current.add(dedupeKey);
+        setSavedResults(loadGameResults());
+      }
+    } catch { /* ignore */ }
   };
 
   const startGame = async () => {
@@ -570,6 +773,7 @@ export default function HostView() {
         answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
         timerRunning:false, timerValue:room.timerSetting, winnerMessage:"", winnerTeam:0,
         questionStatus:"idle", gameStatus:"lobby", activeTeam:1, roundNumber:1 });
+      savedResultRef.current.clear();
       showToast.success("تم إعادة ضبط اللعبة");
     });
   };
@@ -847,12 +1051,50 @@ export default function HostView() {
   if (hostViewMode === "dashboard") {
     const templatesCount = STARTER_TEMPLATES.length + communityTemplates.length;
     const gamesCount = communityTemplates.filter(t=>t.userCreated).length;
+    const resultsAggregate = aggregateResults(savedResults);
     const dashboardFilteredTemplates = [...STARTER_TEMPLATES, ...communityTemplates]
       .filter(tpl=>!templateSearch || tpl.name.includes(templateSearch))
       .filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory))
       .filter(tpl=>!templateLevel || tpl.level===templateLevel);
+    const handleDeleteResult = (id: string) => {
+      if (!window.confirm("هل تريد حذف هذه النتيجة؟ لا يمكن التراجع.")) return;
+      deleteGameResult(id);
+      setSavedResults(loadGameResults());
+      setPreviewResult(null);
+      showToast.success("تم حذف النتيجة.");
+    };
+    const handleExportResult = (r: GameResult) => {
+      const blob = new Blob([JSON.stringify(r, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `wasla-result-${r.roomCode}.json`; a.click(); URL.revokeObjectURL(url);
+      showToast.success("تم تصدير النتيجة.");
+    };
+    const handleCopySummary = (text: string) => {
+      navigator.clipboard.writeText(text).then(() => showToast.success("تم نسخ الملخص ✓")).catch(() => showToast.error("فشل النسخ"));
+    };
+    const exportAllJSON = () => {
+      const blob = new Blob([exportResultsJSON()], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "wasla-results.json"; a.click(); URL.revokeObjectURL(url);
+      showToast.success("تم تصدير كل النتائج (JSON).");
+    };
+    const exportAllCSV = () => {
+      const blob = new Blob([exportResultsCSV()], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "wasla-results.csv"; a.click(); URL.revokeObjectURL(url);
+      showToast.success("تم تصدير كل النتائج (CSV).");
+    };
     return (
       <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#090d18 0%,#0f172a 60%,#090d18 100%)", padding:"1rem" }}>
+        {previewResult && (
+          <ResultPreviewModal
+            result={previewResult}
+            onClose={() => setPreviewResult(null)}
+            onCopySummary={handleCopySummary}
+            onExportJSON={handleExportResult}
+            onDelete={handleDeleteResult}
+          />
+        )}
         <div style={{ maxWidth:1200, margin:"0 auto" }}>
           <div className="kc-card" style={{ marginBottom:"0.8rem" }}>
             <div style={{ display:"flex", justifyContent:"space-between", gap:"0.7rem", flexWrap:"wrap", alignItems:"center" }}>
@@ -872,33 +1114,79 @@ export default function HostView() {
             </div>
           </div>
           {dashboardTab==="home" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))", gap:"0.8rem" }}>
-            <div className="kc-card"><div className="section-title">إجراءات سريعة</div><div style={{ display:"flex", gap:"0.45rem", flexWrap:"wrap" }}><button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>بدء الاستضافة</button><button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>اختيار قالب</button><button className="btn-secondary" onClick={importBoard}>استيراد لعبة</button><button className="btn-secondary" onClick={()=>setDashboardTab("results")}>عرض النتائج</button></div></div>
-            <div className="kc-card"><div className="section-title">إحصاءات</div><div style={{ display:"grid", gap:"0.4rem" }}>{[{k:"القوالب المتاحة",v:templatesCount},{k:"الألعاب المحفوظة",v:gamesCount},{k:"النتائج المحفوظة",v:0},{k:"آخر لعبة",v:room?.gameTitle || "—"}].map(s=><div key={s.k} style={{ display:"flex", justifyContent:"space-between", color:"#cbd5e1" }}><span>{s.k}</span><strong>{s.v}</strong></div>)}</div></div>
-            <div className="kc-card"><div className="section-title">ألعابي</div><div style={{ color:"#94a3b8", fontSize:"0.84rem" }}>لا توجد ألعاب محفوظة بعد. أنشئ لعبة جديدة أو استخدم أحد القوالب.</div></div>
-            <div className="kc-card"><div className="section-title">آخر النتائج</div><div style={{ color:"#94a3b8", fontSize:"0.84rem" }}>لا توجد نتائج محفوظة بعد. ابدأ لعبة جديدة لحفظ أول نتيجة.</div></div>
+            <div className="kc-card" style={{ gridColumn:"1 / -1", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"0.7rem" }}>
+              <div>
+                <div style={{ fontSize:"1.1rem", fontWeight:800, color:"#f0ede8" }}>مرحباً {hostProfile.hostName || "بك"} 👋</div>
+                <div style={{ fontSize:"0.85rem", color:"#94a3b8", marginTop:"0.2rem" }}>ابدأ تحدياً جديداً، استخدم قالباً جاهزاً، أو تابع آخر لعبة محفوظة.</div>
+              </div>
+              <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
+                <button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>{room ? "بدء الاستضافة" : (creating ? "جارٍ..." : "إنشاء لعبة جديدة")}</button>
+                <button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>عرض القوالب</button>
+              </div>
+            </div>
+            <div className="kc-card"><div className="section-title">إجراءات سريعة</div><div style={{ display:"flex", gap:"0.45rem", flexWrap:"wrap" }}><button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>عرض القوالب</button><button className="btn-secondary" onClick={()=>setDashboardTab("results")}>عرض النتائج</button><button className="btn-secondary" onClick={importBoard}>استيراد لعبة</button></div></div>
+            <div className="kc-card"><div className="section-title">إحصاءات</div><div style={{ display:"grid", gap:"0.4rem" }}>{[{k:"القوالب المتاحة",v:templatesCount},{k:"الألعاب المحفوظة",v:gamesCount},{k:"النتائج المحفوظة",v:savedResults.length},{k:"آخر لعبة",v:resultsAggregate.lastGameTitle}].map(s=><div key={s.k} style={{ display:"flex", justifyContent:"space-between", color:"#cbd5e1" }}><span>{s.k}</span><strong>{s.v}</strong></div>)}</div></div>
+            <div className="kc-card"><div className="section-title">ملخص المعلم</div><div style={{ display:"grid", gap:"0.4rem", color:"#cbd5e1", fontSize:"0.86rem" }}>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>إجمالي الألعاب</span><strong>{resultsAggregate.totalGames}</strong></div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>إجمالي المشاركين</span><strong>{resultsAggregate.totalParticipants}</strong></div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>أكثر فريق فوزاً</span><strong>{resultsAggregate.mostWinningTeamName}</strong></div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>متوسط الأسئلة</span><strong>{resultsAggregate.avgQuestions}</strong></div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}><span>آخر لعبة</span><strong>{resultsAggregate.lastGameDate}</strong></div>
+            </div></div>
             <div className="kc-card" style={{ gridColumn:"1 / -1" }}>
               <div className="section-title">قوالب مميزة</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))", gap:"0.6rem" }}>
-                {STARTER_TEMPLATES.slice(0,4).map(tpl=>{
+                {STARTER_TEMPLATES.slice(0,6).map(tpl=>{
                   const count = tpl.boardBanks?.reduce((n,b)=>n+(b.questionBank?.length||0),0) || tpl.questions.length;
-                  return <div key={tpl.id} style={{ background:"#141e2d", border:"1px solid #1a2332", borderRadius:"10px", padding:"0.6rem" }}>
+                  return <div key={tpl.id} style={{ background:"#141e2d", border:"1px solid #1a2332", borderRadius:"12px", padding:"0.7rem" }}>
                     <div style={{ fontWeight:700, color:"#f0ede8" }}>{tpl.name}</div>
-                    <div style={{ fontSize:"0.74rem", color:"#94a3b8" }}>التصنيف: {tpl.categories.join("، ")} • المستوى: {tpl.level}</div>
-                    <div style={{ fontSize:"0.74rem", color:"#94a3b8" }}>عدد الأسئلة: {count}</div>
-                    <button className="btn-gold" style={{ marginTop:"0.45rem", fontSize:"0.75rem" }} onClick={async()=>{ if(!room) await handleCreate(); setHostViewMode("room"); setTimeout(()=>useTemplate(tpl),200); }}>استخدام القالب</button>
+                    <div style={{ fontSize:"0.74rem", color:"#94a3b8", marginTop:"0.2rem" }}>{tpl.description || "قالب تعليمي سريع"}</div>
+                    <div style={{ fontSize:"0.74rem", color:"#94a3b8", marginTop:"0.25rem" }}>التصنيف: {tpl.categories.join("، ")} • المستوى: {tpl.level} • الأسئلة: {count}</div>
+                    <div style={{ display:"flex", gap:"0.35rem", marginTop:"0.5rem", flexWrap:"wrap" }}>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
+                      <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={async()=>{ if(!room) await handleCreate(); setHostViewMode("room"); setTimeout(()=>useTemplate(tpl),200); }}>استخدام القالب</button>
+                    </div>
                   </div>;
                 })}
               </div>
             </div>
             <div className="kc-card" style={{ gridColumn:"1 / -1" }}>
-              <div className="section-title">متابعة سريعة</div>
-              <div style={{ color:"#94a3b8", fontSize:"0.85rem" }}>لا توجد أنشطة حديثة بعد. ابدأ بإنشاء لعبة جديدة أو استخدم أحد القوالب الجاهزة.</div>
+              <div className="section-title">آخر النشاط</div>
+              {savedResults.length === 0 ? (
+                <div style={{ background:"#141e2d", border:"1px dashed #1a2332", borderRadius:10, padding:"1rem", textAlign:"center", color:"#94a3b8", fontSize:"0.86rem" }}>
+                  <div style={{ fontSize:"1.6rem", marginBottom:"0.3rem" }}>🎯</div>
+                  <div>لا توجد أنشطة حديثة بعد.</div>
+                  <div style={{ fontSize:"0.78rem", color:"#64748b", marginTop:"0.25rem" }}>ابدأ بإنشاء لعبة جديدة أو استخدم أحد القوالب الجاهزة.</div>
+                  <div style={{ display:"flex", gap:"0.4rem", justifyContent:"center", flexWrap:"wrap", marginTop:"0.6rem" }}>
+                    <button className="btn-gold" style={{ fontSize:"0.78rem" }} onClick={()=>room ? setHostViewMode("room") : handleCreate()}>إنشاء لعبة جديدة</button>
+                    <button className="btn-secondary" style={{ fontSize:"0.78rem" }} onClick={()=>setDashboardTab("templates")}>عرض القوالب</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))", gap:"0.6rem" }}>
+                  {savedResults.slice(0,4).map(r => (
+                    <div key={r.id} style={{ background:"#141e2d", border:"1px solid #1a2332", borderRadius:12, padding:"0.7rem" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.4rem" }}>
+                        <div style={{ fontWeight:700, color:"#f0ede8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.gameTitle}</div>
+                        <span className="badge-chip" style={{ fontSize:"0.7rem", color: r.winnerTeam === 1 ? r.team1.color : r.winnerTeam === 2 ? r.team2.color : "#94a3b8" }}>{r.winnerName}</span>
+                      </div>
+                      <div style={{ fontSize:"0.72rem", color:"#94a3b8", marginTop:"0.25rem" }}>
+                        {new Date(r.finishedAt).toLocaleDateString("ar")} • {r.team1.score} - {r.team2.score} • مشاركون: {r.participants}
+                      </div>
+                      <button className="btn-secondary" style={{ fontSize:"0.74rem", marginTop:"0.5rem" }} onClick={() => setPreviewResult(r)}>عرض التفاصيل</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>}
           {dashboardTab==="templates" && <div className="kc-card"><div className="section-title">القوالب</div>
+            <div style={{ fontSize:"0.82rem", color:"#94a3b8", marginBottom:"0.7rem" }}>
+              قوالب مقترحة وقوالب محلية جاهزة <span style={{ color:"#64748b" }}>(تجربة محلية، بدون نشر عبر الإنترنت)</span>
+            </div>
             <div style={{ display:"flex", gap:"0.45rem", flexWrap:"wrap", marginBottom:"0.7rem" }}>
               <input className="kc-input" style={{ maxWidth:240 }} placeholder="ابحث عن قالب..." value={templateSearch} onChange={e=>setTemplateSearch(e.target.value)} />
-              <select className="kc-input" style={{ maxWidth:170 }} value={templateCategory} onChange={e=>setTemplateCategory(e.target.value)}><option value="">كل التصنيفات</option><option value="اللغة العربية">اللغة العربية</option><option value="التربية الإسلامية">التربية الإسلامية</option><option value="العلوم">العلوم</option><option value="حروف">حروف</option><option value="مراجعة عامة">مراجعة عامة</option><option value="غير مصنف">غير مصنف</option></select>
+              <select className="kc-input" style={{ maxWidth:180 }} value={templateCategory} onChange={e=>setTemplateCategory(e.target.value)}><option value="">كل التصنيفات</option><option value="اللغة العربية">اللغة العربية</option><option value="التربية الإسلامية">التربية الإسلامية</option><option value="العلوم">العلوم</option><option value="القيم والأخلاق">القيم والأخلاق</option><option value="مفردات">مفردات</option><option value="حروف">حروف</option><option value="مراجعة عامة">مراجعة عامة</option><option value="غير مصنف">غير مصنف</option></select>
               <select className="kc-input" style={{ maxWidth:150 }} value={templateLevel} onChange={e=>setTemplateLevel(e.target.value)}><option value="">كل المستويات</option><option value="سهل">سهل</option><option value="متوسط">متوسط</option><option value="صعب">صعب</option></select>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:"0.6rem" }}>
@@ -906,7 +1194,59 @@ export default function HostView() {
             </div>
           </div>}
           {dashboardTab==="games" && <div className="kc-card"><div className="section-title">ألعابي</div><div style={{ color:"#94a3b8", marginBottom:"0.45rem", fontSize:"0.84rem" }}>إدارة ألعابك المحفوظة محلياً.</div><input className="kc-input" placeholder="ابحث عن لعبة..." value={gamesSearch} onChange={e=>setGamesSearch(e.target.value)} /><div style={{ marginTop:"0.7rem", background:"#141e2d", border:"1px solid #1a2332", borderRadius:"10px", padding:"0.8rem" }}><div style={{ color:"#94a3b8" }}>لا توجد ألعاب محفوظة بعد. أنشئ لعبة جديدة أو استخدم أحد القوالب الجاهزة.</div><div style={{ display:"flex", gap:"0.4rem", marginTop:"0.55rem", flexWrap:"wrap" }}><button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>عرض القوالب</button><button className="btn-secondary" onClick={importBoard}>استيراد لعبة</button></div></div></div>}
-          {dashboardTab==="results" && <div className="kc-card"><div className="section-title">النتائج</div><div style={{ color:"#94a3b8", marginBottom:"0.5rem", fontSize:"0.84rem" }}>سجل النتائج المحلية للتحديات.</div><button className="btn-secondary">تصدير كل النتائج</button><div style={{ marginTop:"0.7rem", background:"#141e2d", border:"1px solid #1a2332", borderRadius:"10px", padding:"0.8rem" }}><div style={{ color:"#94a3b8" }}>لا توجد نتائج محفوظة بعد. ابدأ لعبة جديدة لحفظ أول نتيجة.</div><div style={{ display:"flex", gap:"0.4rem", marginTop:"0.55rem", flexWrap:"wrap" }}><button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>إنشاء لعبة جديدة</button><button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>عرض القوالب</button></div></div></div>}
+          {dashboardTab==="results" && <div className="kc-card"><div className="section-title">النتائج</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"0.5rem", marginBottom:"0.6rem" }}>
+              <div style={{ color:"#94a3b8", fontSize:"0.84rem" }}>سجل النتائج المحلية للتحديات. <span style={{ color:"#64748b" }}>(تُحفظ على هذا الجهاز فقط)</span></div>
+              <div style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}>
+                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllJSON}>تصدير JSON</button>
+                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllCSV}>تصدير CSV</button>
+              </div>
+            </div>
+            {savedResults.length === 0 ? (
+              <div style={{ background:"#141e2d", border:"1px dashed #1a2332", borderRadius:"12px", padding:"1.2rem", textAlign:"center", color:"#94a3b8", fontSize:"0.88rem" }}>
+                <div style={{ fontSize:"1.8rem", marginBottom:"0.4rem" }}>📋</div>
+                <div style={{ color:"#cbd5e1", fontWeight:700, marginBottom:"0.2rem" }}>لا توجد نتائج محفوظة بعد.</div>
+                <div style={{ fontSize:"0.82rem", color:"#64748b", marginBottom:"0.7rem" }}>ابدأ لعبة جديدة لحفظ أول نتيجة.</div>
+                <div style={{ display:"flex", gap:"0.4rem", justifyContent:"center", flexWrap:"wrap" }}>
+                  <button className="btn-gold" onClick={()=>room ? setHostViewMode("room") : handleCreate()}>إنشاء لعبة جديدة</button>
+                  <button className="btn-secondary" onClick={()=>setDashboardTab("templates")}>عرض القوالب</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))", gap:"0.6rem" }}>
+                {savedResults.map(r => (
+                  <div key={r.id} style={{ background:"#141e2d", border:"1px solid #1a2332", borderRadius:12, padding:"0.75rem" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.4rem", marginBottom:"0.3rem" }}>
+                      <div style={{ fontWeight:700, color:"#f0ede8", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.gameTitle}</div>
+                      <span className="badge-chip" style={{ fontSize:"0.7rem", color: r.winnerTeam === 1 ? r.team1.color : r.winnerTeam === 2 ? r.team2.color : "#94a3b8" }}>🏆 {r.winnerName}</span>
+                    </div>
+                    <div style={{ fontSize:"0.74rem", color:"#94a3b8" }}>
+                      {new Date(r.finishedAt).toLocaleString("ar")}
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.35rem", marginTop:"0.45rem" }}>
+                      <div style={{ background:"#0f1623", borderRadius:8, padding:"0.4rem", textAlign:"center", border:`1px solid ${r.team1.color}33` }}>
+                        <div style={{ fontSize:"0.7rem", color:r.team1.color, fontWeight:700 }}>{r.team1.name}</div>
+                        <div style={{ fontWeight:800, color:"#f0ede8" }}>{r.team1.score}</div>
+                      </div>
+                      <div style={{ background:"#0f1623", borderRadius:8, padding:"0.4rem", textAlign:"center", border:`1px solid ${r.team2.color}33` }}>
+                        <div style={{ fontSize:"0.7rem", color:r.team2.color, fontWeight:700 }}>{r.team2.name}</div>
+                        <div style={{ fontWeight:800, color:"#f0ede8" }}>{r.team2.score}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:"0.72rem", color:"#94a3b8", marginTop:"0.4rem" }}>
+                      مشاركون: {r.participants} • أسئلة: {r.totalQuestions || "غير متوفر"}
+                    </div>
+                    <div style={{ display:"flex", gap:"0.3rem", flexWrap:"wrap", marginTop:"0.5rem" }}>
+                      <button className="btn-gold" style={{ fontSize:"0.72rem" }} onClick={() => setPreviewResult(r)}>عرض التفاصيل</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.72rem" }} onClick={() => handleCopySummary(summarizeResult(r))}>نسخ الملخص</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.72rem" }} onClick={() => handleExportResult(r)}>تصدير</button>
+                      <button className="btn-danger" style={{ fontSize:"0.72rem" }} onClick={() => handleDeleteResult(r.id)}>حذف</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>}
           {dashboardTab==="settings" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))", gap:"0.7rem" }}>
             <div className="kc-card"><div className="section-title">بيانات المضيف</div><label style={lbl}>اسم المضيف</label><input className="kc-input" value={dashboardHostName} onChange={e=>setDashboardHostName(e.target.value)} /><label style={lbl}>اسم الصف أو الفعالية</label><input className="kc-input" value={dashboardClassName} onChange={e=>setDashboardClassName(e.target.value)} /><label style={lbl}>اسم المدرسة أو الجهة</label><input className="kc-input" value={dashboardOrgName} onChange={e=>setDashboardOrgName(e.target.value)} /><button className="btn-gold" onClick={()=>{ localStorage.setItem("kc_host_profile", JSON.stringify({ hostName:dashboardHostName.trim(), className:dashboardClassName.trim(), orgName:dashboardOrgName.trim() })); showToast.success("تم حفظ الإعدادات."); }}>حفظ البيانات</button></div>
             <div className="kc-card"><div className="section-title">إعدادات اللعبة الافتراضية</div><div style={{ color:"#94a3b8", fontSize:"0.82rem", marginBottom:"0.4rem" }}>اسم الفريق الأزرق: {room?.team1.name || "الفريق الأزرق"}</div><div style={{ color:"#94a3b8", fontSize:"0.82rem", marginBottom:"0.4rem" }}>اسم الفريق الأحمر: {room?.team2.name || "الفريق الأحمر"}</div><div style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}><button className="btn-secondary">مؤقت 30ث</button><button className="btn-secondary">مؤقت 60ث</button><button className="btn-secondary">تفعيل السرقة</button><button className="btn-secondary">إخفاء الإجابة</button></div></div>
@@ -961,6 +1301,24 @@ export default function HostView() {
       {previewTemplate && (
         <TemplatePreviewModal previewTemplate={previewTemplate as any} onClose={()=>setPreviewTemplate(null)} />
       )}
+      {liveCellId && room && (() => {
+        const liveCell = room.board.find(c => c.id === liveCellId);
+        if (!liveCell) return null;
+        return (
+          <LiveQuestionModal
+            room={room}
+            cell={liveCell}
+            activeQuestion={room.activeQuestion}
+            onClose={() => setLiveCellId("")}
+            onShowAnswer={() => push({ answerVisibleToHost: true })}
+            onAwardTeam={(team) => { markCorrectForTeam(team); setLiveCellId(""); }}
+            onSkip={() => { skipQ(); setLiveCellId(""); }}
+            onReturnToBank={() => { cancelQuestion(); setLiveCellId(""); }}
+            onRevealToParticipants={() => push({ answerVisibleToParticipants: !room.answerVisibleToParticipants, answerVisibleToHost: true, questionStatus: room.answerVisibleToParticipants ? room.questionStatus : "answer_revealed" })}
+            onAddQuestion={() => { setLiveCellId(""); setEditingCell(liveCell); }}
+          />
+        );
+      })()}
 
       {/* Winner overlay */}
       {room.winnerMessage && (
@@ -1024,6 +1382,18 @@ export default function HostView() {
       {/* Content */}
       <div className="container" style={{ paddingTop:"1.25rem", paddingBottom:"3rem" }}>
 
+        {/* ══ Host Lobby (visible while game has not started) ══ */}
+        {room.gameStatus === "lobby" && (
+          <HostLobbyCard
+            room={room}
+            roomCode={roomCode}
+            joinLink={joinLink(roomCode)}
+            onCopy={copyText}
+            onStartGame={startGame}
+            onBackToDashboard={() => setHostViewMode("dashboard")}
+          />
+        )}
+
         {/* ══ TAB: Setup ══ */}
         {activeTab==="setup" && (
           <div style={{ display:"grid", gap:"1.1rem" }}>
@@ -1051,6 +1421,111 @@ export default function HostView() {
               </div>
             </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))", gap:"1.25rem" }}>
+            {/* Template / question-bank health */}
+            <div className="kc-card" style={{ gridColumn: "1 / -1" }}>
+              <div className="section-title">صحة بنك الأسئلة</div>
+              {(() => {
+                const cells = room.board;
+                const completedCells = cells.filter(c => cellHasQuestions(c)).length;
+                const emptyCells = cells.length - completedCells;
+                const totalQs = cells.reduce((n, c) => {
+                  const bank = (c as any).questionBank;
+                  if (Array.isArray(bank) && bank.length) return n + bank.filter((q:any) => String(q?.question||"").trim()).length;
+                  return n + (c.question.trim() ? 1 : 0);
+                }, 0);
+                const avg = completedCells > 0 ? (totalQs / completedCells).toFixed(1) : "0";
+                const ready = emptyCells === 0 && totalQs > 0;
+                const warn = emptyCells > Math.max(2, Math.floor(cells.length * 0.3));
+                const goToFirstEmpty = () => {
+                  const firstEmpty = sortedBoard(cells).find(c => !cellHasQuestions(c));
+                  if (firstEmpty) setEditingCell(firstEmpty);
+                };
+                const distributeQuestions = () => {
+                  const allBank: any[] = [];
+                  cells.forEach(c => {
+                    const b = (c as any).questionBank;
+                    if (Array.isArray(b) && b.length) allBank.push(...b.filter((q:any) => String(q?.question||"").trim()));
+                    else if (c.question.trim()) allBank.push({ question:c.question, answer:c.answer, category:c.category, difficulty:c.difficulty, points:c.points, hint:c.hint, explanation:c.explanation, letter:c.label });
+                  });
+                  if (!allBank.length) { showToast.warning("لا توجد أسئلة لتوزيعها."); return; }
+                  // Group by first letter of answer (or letter field), then distribute round-robin into matching cells.
+                  const byLetter = new Map<string, any[]>();
+                  allBank.forEach(q => {
+                    const letter = String(q.letter || q.answer || "").trim().charAt(0);
+                    const norm = ARABIC_LETTER_NORMALIZE[letter] || letter;
+                    if (!byLetter.has(norm)) byLetter.set(norm, []);
+                    byLetter.get(norm)!.push(q);
+                  });
+                  const nextBoard = cells.map(c => {
+                    const norm = ARABIC_LETTER_NORMALIZE[c.label] || c.label;
+                    const matched = byLetter.get(norm) || [];
+                    if (matched.length === 0) return c;
+                    const first = matched[0];
+                    return {
+                      ...c,
+                      question: first.question || "",
+                      answer: first.answer || "",
+                      category: first.category || c.category,
+                      difficulty: (first.difficulty || c.difficulty) as BoardCell["difficulty"],
+                      points: Number(first.points) || c.points || 1,
+                      hint: first.hint || "",
+                      explanation: first.explanation || "",
+                      ...( { questionBank: matched } as any ),
+                    };
+                  });
+                  push({ board: nextBoard });
+                  showToast.success("تم توزيع الأسئلة على الحروف المطابقة.");
+                };
+                const repairTemplate = () => {
+                  // Repair: drop banks with empty questions; coerce defaults.
+                  const nextBoard = cells.map(c => {
+                    const bank = (c as any).questionBank;
+                    if (!Array.isArray(bank)) return c;
+                    const cleaned = bank.filter((q:any) => String(q?.question||"").trim() && String(q?.answer||"").trim());
+                    return { ...c, ...( { questionBank: cleaned } as any ) };
+                  });
+                  push({ board: nextBoard });
+                  showToast.success("تم تنظيف القالب وإزالة الأسئلة الفارغة.");
+                };
+                return (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.5rem", marginBottom: "0.7rem" }}>
+                      <div style={{ background: "#141e2d", borderRadius: 10, padding: "0.55rem 0.7rem", border: "1px solid #1a2332" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>الحروف المكتملة</div>
+                        <div style={{ fontWeight: 800, color: "#22c55e" }}>{completedCells} / {cells.length}</div>
+                      </div>
+                      <div style={{ background: "#141e2d", borderRadius: 10, padding: "0.55rem 0.7rem", border: "1px solid #1a2332" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>حروف بدون أسئلة</div>
+                        <div style={{ fontWeight: 800, color: emptyCells > 0 ? "#ef4444" : "#22c55e" }}>{emptyCells}</div>
+                      </div>
+                      <div style={{ background: "#141e2d", borderRadius: 10, padding: "0.55rem 0.7rem", border: "1px solid #1a2332" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>إجمالي الأسئلة</div>
+                        <div style={{ fontWeight: 800, color: "#f0ede8" }}>{totalQs}</div>
+                      </div>
+                      <div style={{ background: "#141e2d", borderRadius: 10, padding: "0.55rem 0.7rem", border: "1px solid #1a2332" }}>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>متوسط لكل حرف</div>
+                        <div style={{ fontWeight: 800, color: "#f0ede8" }}>{avg}</div>
+                      </div>
+                      <div style={{ background: ready ? "rgba(34,197,94,0.12)" : "#141e2d", borderRadius: 10, padding: "0.55rem 0.7rem", border: `1px solid ${ready ? "rgba(34,197,94,0.4)" : "#1a2332"}` }}>
+                        <div style={{ fontSize: "0.72rem", color: "#94a3b8" }}>هل القالب جاهز؟</div>
+                        <div style={{ fontWeight: 800, color: ready ? "#22c55e" : "#f59e0b" }}>{ready ? "جاهز للعب ✅" : "بحاجة لإكمال"}</div>
+                      </div>
+                    </div>
+                    {warn && (
+                      <div style={{ background: "rgba(245,158,11,0.1)", border: "1.5px solid rgba(245,158,11,0.35)", color: "#fcd34d", borderRadius: 10, padding: "0.55rem 0.75rem", fontSize: "0.85rem", marginBottom: "0.6rem" }}>
+                        ⚠ يوجد {emptyCells} حروف بدون أسئلة. أكملها قبل بدء التحدي لتجربة أفضل.
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+                      <button className="btn-gold" style={{ fontSize: "0.78rem" }} onClick={goToFirstEmpty} disabled={emptyCells === 0}>إضافة الأسئلة الناقصة</button>
+                      <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={repairTemplate}>إصلاح القالب</button>
+                      <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={distributeQuestions}>توزيع الأسئلة على الحروف</button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
             {/* Board */}
             <div className="kc-card">
               <div className="section-title">لوحة الحروف</div>
@@ -1134,7 +1609,7 @@ export default function HostView() {
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="بحث عن قالب" value={templateSearch} onChange={e=>setTemplateSearch(e.target.value)} />
                 <select className="kc-input" style={{ maxWidth:180 }} value={templateCategory} onChange={e=>setTemplateCategory(e.target.value)}>
-                  <option value="">كل التصنيفات</option><option value="إسلاميات">إسلاميات</option><option value="لغة عربية">لغة عربية</option><option value="رياضيات">رياضيات</option><option value="معرفة عامة">معرفة عامة</option><option value="مفردات">مفردات</option><option value="قراءة وفهم">قراءة وفهم</option><option value="تقنية">تقنية</option><option value="حياة يومية">حياة يومية</option><option value="غير مصنف">غير مصنف</option>
+                  <option value="">كل التصنيفات</option><option value="اللغة العربية">اللغة العربية</option><option value="التربية الإسلامية">التربية الإسلامية</option><option value="العلوم">العلوم</option><option value="القيم والأخلاق">القيم والأخلاق</option><option value="مفردات">مفردات</option><option value="حروف">حروف</option><option value="مراجعة عامة">مراجعة عامة</option><option value="غير مصنف">غير مصنف</option>
                 </select>
                 <select className="kc-input" style={{ maxWidth:160 }} value={templateLevel} onChange={e=>setTemplateLevel(e.target.value)}>
                   <option value="">كل المستويات</option><option value="سهل">سهل</option><option value="متوسط">متوسط</option><option value="صعب">صعب</option>
@@ -1180,6 +1655,14 @@ export default function HostView() {
 
         {/* ══ TAB: Game ══ */}
         {activeTab==="game" && (
+          <>
+          <div className="kc-card" style={{ marginBottom: "0.85rem", display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "center" }}>
+            <div style={{ fontSize: "0.78rem", color: "#94a3b8", marginInlineEnd: "0.5rem" }}>إجراءات سريعة:</div>
+            <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={swapActiveTeam}>🔄 تبديل الفريق النشط</button>
+            <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={undoLastAction}>↶ إلغاء آخر حركة</button>
+            <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={() => { if (room) showToast.success("تم حفظ اللعبة"); }}>💾 حفظ اللعبة</button>
+            <button className="btn-danger" style={{ fontSize: "0.78rem", marginInlineStart: "auto" }} onClick={endGame}>🏁 إنهاء اللعبة</button>
+          </div>
           <div style={{ display:"grid", gridTemplateColumns: presentationMode ? "1fr" : "1fr 1.4fr", gap:"1.25rem" }}>
             {/* Left: controls */}
             {!presentationMode && <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
@@ -1262,9 +1745,30 @@ export default function HostView() {
                         {room.answerVisibleToParticipants?"الإجابة ظاهرة":"الإجابة مخفية"}
                       </span>
                     </div>
-                    <div style={{ fontSize:"1rem", fontWeight:700, color:"#f0ede8", lineHeight:1.7, marginBottom:"0.75rem" }}>
+                    <div style={{ fontSize:"1rem", fontWeight:700, color:"#f0ede8", lineHeight:1.7, marginBottom:"0.5rem" }}>
                       {room.activeQuestion.question}
                     </div>
+                    {/* Type-specific quick options */}
+                    {(room.activeQuestion.type === "mcq" && Array.isArray(room.activeQuestion.choices) && room.activeQuestion.choices.length > 0) && (
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px,1fr))", gap:"0.4rem", marginBottom:"0.6rem" }}>
+                        {room.activeQuestion.choices.map((c, i) => (
+                          <div key={i} style={{ background: c === room.activeQuestion?.answer ? "rgba(34,197,94,0.12)" : "#141e2d", border: `1.5px solid ${c === room.activeQuestion?.answer ? "rgba(34,197,94,0.4)" : "#1a2332"}`, borderRadius:10, padding:"0.45rem 0.6rem", fontSize:"0.85rem", color: c === room.activeQuestion?.answer ? "#22c55e" : "#cbd5e1", fontWeight:600, display:"flex", alignItems:"center", gap:"0.4rem" }}>
+                            <span style={{ fontSize:"0.7rem", color:"#94a3b8", fontWeight:700 }}>{String.fromCharCode(65 + i)}.</span>
+                            <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis" }}>{c}</span>
+                            {c === room.activeQuestion?.answer && room.answerVisibleToHost && <span style={{ fontSize:"0.7rem" }}>✓</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {room.activeQuestion.type === "tf" && (
+                      <div style={{ display:"flex", gap:"0.5rem", marginBottom:"0.6rem" }}>
+                        {["صحيح","خطأ"].map((c) => (
+                          <div key={c} style={{ flex:1, textAlign:"center", padding:"0.5rem", borderRadius:10, background: c === room.activeQuestion?.answer ? "rgba(34,197,94,0.12)" : "#141e2d", border:`1.5px solid ${c === room.activeQuestion?.answer ? "rgba(34,197,94,0.4)" : "#1a2332"}`, color: c === room.activeQuestion?.answer ? "#22c55e" : "#cbd5e1", fontWeight:700 }}>
+                            {c}{c === room.activeQuestion?.answer && room.answerVisibleToHost ? " ✓" : ""}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {/* Answer (host) */}
                     <div style={{ marginBottom:"0.75rem" }}>
                       {room.answerVisibleToHost ? (
@@ -1317,7 +1821,10 @@ export default function HostView() {
             <div className="kc-card">
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:"0.5rem", flexWrap:"wrap" }}>
                 <div className="section-title">{presentationMode ? "وضع العرض" : "وضع الاستضافة"}</div>
-                <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>setPresentationMode(v=>!v)}>{presentationMode ? "الخروج من وضع العرض" : "وضع العرض"}</button>
+                <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
+                  <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>setPresentationMode(v=>!v)}>{presentationMode ? "الخروج من وضع العرض" : "وضع العرض"}</button>
+                  <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>window.open(`/display?room=${roomCode}`,"_blank","noopener")}>📺 شاشة العرض الكاملة</button>
+                </div>
               </div>
               <div style={{ fontSize:"0.78rem", color:"#64748b", marginBottom:"0.5rem" }}>اضغط على حرف لتحميل سؤاله</div>
               {/* Path goal legend */}
@@ -1341,6 +1848,7 @@ export default function HostView() {
               )}
             </div>
           </div>
+          </>
         )}
 
         {/* ══ TAB: Settings ══ */}
@@ -1563,6 +2071,27 @@ function PlayersSettings({ room, roomCode, push }: { room: RoomState; roomCode: 
     catch (e) { console.error(e); showToast.error("فشل الحذف"); }
   };
 
+  const randomizeTeams = async () => {
+    if (!players.length) { showToast.warning("لا يوجد مشاركون لتوزيعهم."); return; }
+    const shuffled = [...players].sort(() => Math.random() - 0.5);
+    try {
+      for (let i = 0; i < shuffled.length; i++) {
+        const team: 1 | 2 = (i % 2 === 0) ? 1 : 2;
+        await assignPlayerTeam(roomCode, shuffled[i].id, team);
+      }
+      showToast.success("تم توزيع المشاركين عشوائياً على الفريقين");
+    } catch (e) { console.error(e); showToast.error("فشل التوزيع العشوائي"); }
+  };
+
+  const clearAllMembers = async () => {
+    if (!players.length) { showToast.info("لا يوجد مشاركون لحذفهم."); return; }
+    if (!window.confirm("هل تريد حذف جميع المشاركين من الغرفة؟")) return;
+    try {
+      for (const p of players) await removePlayer(roomCode, p.id);
+      showToast.success("تم مسح جميع المشاركين");
+    } catch (e) { console.error(e); showToast.error("فشل المسح"); }
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:"1.25rem" }}>
       {/* Add single */}
@@ -1609,7 +2138,13 @@ function PlayersSettings({ room, roomCode, push }: { room: RoomState; roomCode: 
 
       {/* Player list */}
       <div className="kc-card">
-        <div className="section-title">المشاركون ({players.length})</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.4rem", marginBottom: "0.6rem" }}>
+          <div className="section-title" style={{ marginBottom: 0 }}>المشاركون ({players.length})</div>
+          <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={randomizeTeams} disabled={!players.length}>🎲 توزيع عشوائي</button>
+            <button className="btn-danger" style={{ fontSize: "0.78rem" }} onClick={clearAllMembers} disabled={!players.length}>🗑 مسح الأعضاء</button>
+          </div>
+        </div>
         {players.length===0 ? (
           <div style={{ textAlign:"center", padding:"2rem", color:"#3d5068" }}>
             <div style={{ fontSize:"2rem", marginBottom:"0.5rem" }}>👥</div>
@@ -1671,6 +2206,14 @@ function LinksSettings({ room, roomCode }: { room: RoomState; roomCode: string }
   const dl = displayLink(roomCode);
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
+      <JoinQRCard
+        roomCode={roomCode}
+        joinLink={jl}
+        onCopy={copyText}
+        onShowDisplay={() => window.open(`/display?room=${roomCode}`, "_blank", "noopener")}
+        onOpenJoin={() => window.open(`/join?room=${roomCode}`, "_blank", "noopener")}
+        size={180}
+      />
       <div className="kc-card">
         <div className="section-title">رابط الانضمام</div>
         <div style={{ fontSize:"0.8rem", color:"#64748b", marginBottom:"0.75rem" }}>
