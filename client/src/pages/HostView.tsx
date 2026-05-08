@@ -627,8 +627,9 @@ export default function HostView() {
   const endGame = () => {
     if (!room) return;
     confirm("هل تريد إنهاء اللعبة الآن؟ سيتم حفظ النتيجة الحالية.", async () => {
-      const t1 = room.team1Score;
-      const t2 = room.team2Score;
+      if (room.gameStatus === "finished" && room.winnerMessage) return;
+      const t1 = Number.isFinite(room.team1Score) ? room.team1Score : 0;
+      const t2 = Number.isFinite(room.team2Score) ? room.team2Score : 0;
       const winner: 0 | 1 | 2 = t1 > t2 ? 1 : t2 > t1 ? 2 : 0;
       const msg = winner === 1 ? `🏆 ${room.team1.name} فاز!` : winner === 2 ? `🏆 ${room.team2.name} فاز!` : "🤝 تعادل!";
       await push({ winnerMessage: msg, winnerTeam: winner, gameStatus: "finished" });
@@ -776,6 +777,14 @@ export default function HostView() {
       savedResultRef.current.clear();
       showToast.success("تم إعادة ضبط اللعبة");
     });
+  };
+
+  const returnToTemplates = async () => {
+    if (!room) return;
+    await push({ winnerMessage: "", winnerTeam: 0, gameStatus: "lobby", activeQuestion: null, selectedCellId: "", questionStatus: "idle", timerRunning: false });
+    savedResultRef.current.clear();
+    setActiveTab("setup");
+    setHostViewMode("dashboard");
   };
 
   const restoreOrder = async () => {
@@ -1279,8 +1288,8 @@ export default function HostView() {
 
   const filledCells = room.board.filter(c=>c.question.trim()).length;
   const claimedCells = room.board.filter(c=>c.claimedBy!==0).length;
-  const blueClaimedCells = room.board.filter(c=>c.claimedBy===1).length;
-  const redClaimedCells = room.board.filter(c=>c.claimedBy===2).length;
+  const blueFinalScore = Number.isFinite(room.team1Score) ? room.team1Score : 0;
+  const redFinalScore = Number.isFinite(room.team2Score) ? room.team2Score : 0;
   const usedCells = room.board.filter(c=>c.used).length;
   const totalCells = room.board.length;
   const winningPathIds = room.winnerTeam ? findWinningPath(room.board, room.gridSize, room.winnerTeam as 1|2) : [];
@@ -1331,16 +1340,16 @@ export default function HostView() {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.6rem", width:"100%", marginBottom:"1rem" }}>
               <div style={{ background:"#10233f", border:"1px solid #1e3a8a", borderRadius:"10px", padding:"0.6rem" }}>
                 <div style={{ color:"#93c5fd", fontSize:"0.82rem" }}>الفريق الأزرق</div>
-                <div style={{ color:"#dbeafe", fontWeight:800, fontSize:"1.3rem" }}>{blueClaimedCells}</div>
+                <div style={{ color:"#dbeafe", fontWeight:800, fontSize:"1.3rem" }}>{blueFinalScore}</div>
               </div>
               <div style={{ background:"#3f1018", border:"1px solid #991b1b", borderRadius:"10px", padding:"0.6rem" }}>
                 <div style={{ color:"#fda4af", fontSize:"0.82rem" }}>الفريق الأحمر</div>
-                <div style={{ color:"#ffe4e6", fontWeight:800, fontSize:"1.3rem" }}>{redClaimedCells}</div>
+                <div style={{ color:"#ffe4e6", fontWeight:800, fontSize:"1.3rem" }}>{redFinalScore}</div>
               </div>
             </div>
             <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", justifyContent:"center" }}>
               <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
-              <button className="btn-secondary" onClick={()=>setActiveTab("setup")}>الرجوع للقوالب</button>
+              <button className="btn-secondary" onClick={returnToTemplates}>الرجوع للقوالب</button>
             </div>
           </div>
         </div>
