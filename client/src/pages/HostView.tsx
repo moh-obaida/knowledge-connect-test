@@ -51,12 +51,12 @@ function ConfirmModal({ msg, onYes, onNo }: { msg: string; onYes: () => void; on
 }
 
 // ── Cell question editor ──────────────────────────────────────
-type QType = "fill" | "mcq" | "tf";
+type QType = "fill" | "mcq" | "tf" | "image" | "open";
 const TF_OPTIONS = ["صحيح", "خطأ"] as const;
 function CellEditor({ cell, onSave, onClose }: {
   cell: BoardCell; onSave: (u: Partial<BoardCell>) => void; onClose: () => void;
 }) {
-  type BankQ = { type: QType; question:string; answer:string; choices?: string[]; category:string; difficulty: BoardCell["difficulty"]; points:number; hint:string; explanation:string };
+  type BankQ = { type: QType; question:string; answer:string; choices?: string[]; imageUrl?: string; category:string; difficulty: BoardCell["difficulty"]; points:number; hint:string; explanation:string };
   const normalized = (): BankQ[] => {
     const arr = Array.isArray((cell as any).questionBank) ? (cell as any).questionBank : [];
     const mapped = arr.filter((x:any)=>x?.question).map((x:any)=>({
@@ -64,6 +64,7 @@ function CellEditor({ cell, onSave, onClose }: {
       question: String(x.question||"").trim(),
       answer: String(x.answer||"").trim(),
       choices: Array.isArray(x.choices) ? x.choices.map((c:any)=>String(c||"").trim()).filter(Boolean) : undefined,
+      imageUrl: String(x.imageUrl||"").trim(),
       category: String(x.category||"غير مصنف").trim() || "غير مصنف",
       difficulty: (x.difficulty==="easy"||x.difficulty==="medium"||x.difficulty==="hard") ? x.difficulty : "medium",
       points: Number(x.points)||1,
@@ -81,6 +82,7 @@ function CellEditor({ cell, onSave, onClose }: {
   const [a, setA] = useState(cell.answer);
   const [choices, setChoices] = useState<string[]>(["", "", "", ""]);
   const [cat, setCat] = useState(cell.category);
+  const [imageUrl, setImageUrl] = useState("");
   const [diff, setDiff] = useState(cell.difficulty);
   const [pts, setPts] = useState(cell.points);
   const [hint, setHint] = useState(cell.hint);
@@ -107,7 +109,7 @@ function CellEditor({ cell, onSave, onClose }: {
       }
     }
     const next = [...questionBank];
-    const payload: BankQ = { type, question: q.trim(), answer: answerToSave, choices: choicesToSave, category: (cat.trim()||"غير مصنف"), difficulty: diff, points: Number(pts)||1, hint: hint.trim(), explanation: expl.trim() };
+    const payload: BankQ = { type, question: q.trim(), answer: answerToSave, choices: choicesToSave, imageUrl: imageUrl.trim(), category: (cat.trim()||"غير مصنف"), difficulty: diff, points: Number(pts)||1, hint: hint.trim(), explanation: expl.trim() };
     if (editingIndex >= 0) next[editingIndex] = payload;
     else {
       if (next.length >= 50) { showToast.warning("وصلت إلى الحد الأقصى لهذا الحرف: 50 سؤالًا."); return; }
@@ -133,6 +135,7 @@ function CellEditor({ cell, onSave, onClose }: {
       setChoices(["", "", "", ""]);
     }
     setCat(item.category);
+    setImageUrl(item.imageUrl || "");
     setDiff(item.difficulty);
     setPts(item.points);
     setHint(item.hint);
@@ -474,10 +477,11 @@ export default function HostView() {
       timerRef.current = setInterval(async () => {
         const cur = roomRef.current;
         if (!cur?.timerRunning) { clearInterval(timerRef.current!); return; }
-        const nv = cur.timerValue - 1;
+        const nv = Math.max(0, cur.timerValue - 1);
         if (nv <= 0) {
           clearInterval(timerRef.current!);
           await updateRoom(cur.roomCode, { timerValue:0, timerRunning:false, questionStatus:"time_up" });
+          showToast.info("انتهى الوقت");
         } else {
           await updateRoom(cur.roomCode, { timerValue:nv });
         }
@@ -486,7 +490,7 @@ export default function HostView() {
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [room?.timerRunning]);
+  }, [room?.timerRunning, room?.roomCode]);
 
   const confirm = (msg: string, action: ()=>void) => { setConfirmMsg(msg); setConfirmAction(()=>action); };
   const cellHasQuestions = (cell: BoardCell) => {
@@ -547,7 +551,7 @@ export default function HostView() {
         activeQuestion: aq, selectedCellId: cell.id,
         answerVisibleToHost: false, answerVisibleToParticipants: false,
         hintVisibleToParticipants: false, questionStatus: "active",
-        timerValue: room.timerSetting, timerRunning: false,
+        timerValue: room.timerSetting > 0 ? room.timerSetting : 0, timerMax: room.timerSetting > 0 ? room.timerSetting : 0, timerRunning: room.timerSetting > 0,
       });
     }
   };
@@ -573,7 +577,9 @@ export default function HostView() {
     undoStackRef.current.push({ type: "claim", cellId, team, points: pts, previousActiveTeam: room.activeTeam });
     const winner = checkWinner(nb, room.gridSize);
     const winMsg = winner===1 ? `فاز ${room.team1.name}!` : winner===2 ? `فاز ${room.team2.name}!` : "";
-    await push({ board:nb, ...scoreUp, questionStatus:"correct", selectedCellId:"",
+    await push({ board:nb, ...scoreUp, questionStatus:"correct", selectedCellId:"", activeQuestion:null,
+      answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
+      timerRunning:false, timerValue:0, timerMax:0,
       winnerMessage: winMsg, winnerTeam: winner,
       gameStatus: winMsg ? "finished" : room.gameStatus });
     if (winMsg) {
@@ -627,11 +633,13 @@ export default function HostView() {
   const endGame = () => {
     if (!room) return;
     confirm("هل تريد إنهاء اللعبة الآن؟ سيتم حفظ النتيجة الحالية.", async () => {
-      const t1 = room.team1Score;
-      const t2 = room.team2Score;
-      const winner: 0 | 1 | 2 = t1 > t2 ? 1 : t2 > t1 ? 2 : 0;
+      if (room.gameStatus === "finished" && room.winnerMessage) return;
+      const t1 = Number.isFinite(room.team1Score) ? room.team1Score : 0;
+      const t2 = Number.isFinite(room.team2Score) ? room.team2Score : 0;
+      const pathWinner = checkWinner(room.board, room.gridSize);
+      const winner: 0 | 1 | 2 = gameMode === "connection" ? pathWinner : (t1 > t2 ? 1 : t2 > t1 ? 2 : 0);
       const msg = winner === 1 ? `🏆 ${room.team1.name} فاز!` : winner === 2 ? `🏆 ${room.team2.name} فاز!` : "🤝 تعادل!";
-      await push({ winnerMessage: msg, winnerTeam: winner, gameStatus: "finished" });
+      await push({ winnerMessage: msg, winnerTeam: winner, gameStatus: "finished", timerRunning:false, timerValue:0, timerMax:0, activeQuestion:null, selectedCellId:"", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
       try {
         const finishedRoom: RoomState = { ...room, winnerTeam: winner, winnerMessage: msg, gameStatus: "finished" } as RoomState;
         const dedupeKey = `${finishedRoom.roomCode}-${winner}-${finishedRoom.team1Score}-${finishedRoom.team2Score}`;
@@ -726,9 +734,15 @@ export default function HostView() {
     }
   };
 
-  const startTimer = () => push({ timerRunning:true });
+  const startTimer = () => {
+    if (!room) return;
+    if (room.timerSetting <= 0) { showToast.info("بدون مؤقت"); return; }
+    push({ timerRunning:true, timerMax: room.timerSetting });
+  };
   const pauseTimer = () => push({ timerRunning:false });
-  const resetTimer = () => { if (!room) return; push({ timerRunning:false, timerValue:room.timerSetting }); };
+  const resumeTimer = () => { if (!room || room.timerValue <= 0) return; push({ timerRunning:true }); };
+  const addTimer15 = () => { if (!room) return; push({ timerValue: (room.timerValue || 0) + 15, timerMax: Math.max(room.timerMax || 0, (room.timerValue || 0) + 15) }); };
+  const resetTimer = () => { if (!room) return; push({ timerRunning:false, timerValue:0, timerMax:0 }); };
   const addScore = (t: 1|2, d: number) => {
     if (!room) return;
     if (t===1) push({ team1Score: Math.max(0, room.team1Score+d) });
@@ -738,7 +752,7 @@ export default function HostView() {
     if (!room) return;
     const msg = t==="draw" ? "🤝 تعادل!" : t===1 ? `🏆 ${room.team1.name} فاز!` : `🏆 ${room.team2.name} فاز!`;
     const winnerTeam: 0|1|2 = t==="draw" ? 0 : t;
-    push({ winnerMessage:msg, winnerTeam, gameStatus:"finished" });
+    push({ winnerMessage:msg, winnerTeam, gameStatus:"finished", timerRunning:false, timerValue:0, timerMax:0, activeQuestion:null, selectedCellId:"", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
     try {
       const finishedRoom: RoomState = { ...room, winnerTeam, winnerMessage: msg, gameStatus: "finished" } as RoomState;
       const dedupeKey = `${finishedRoom.roomCode}-${winnerTeam}-${finishedRoom.team1Score}-${finishedRoom.team2Score}`;
@@ -771,11 +785,19 @@ export default function HostView() {
       const rb = room.board.map(c=>({...c, claimedBy:0 as const, used:false}));
       await push({ board:rb, team1Score:0, team2Score:0, activeQuestion:null, selectedCellId:"",
         answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
-        timerRunning:false, timerValue:room.timerSetting, winnerMessage:"", winnerTeam:0,
-        questionStatus:"idle", gameStatus:"lobby", activeTeam:1, roundNumber:1 });
+        timerRunning:false, timerValue:0, timerMax:0, winnerMessage:"", winnerTeam:0,
+        questionStatus:"idle", gameStatus:"active", activeTeam:1, roundNumber:1 });
       savedResultRef.current.clear();
       showToast.success("تم إعادة ضبط اللعبة");
     });
+  };
+
+  const returnToTemplates = async () => {
+    if (!room) return;
+    await push({ winnerMessage: "", winnerTeam: 0, gameStatus: "lobby", activeQuestion: null, selectedCellId: "", questionStatus: "idle", timerRunning: false, timerValue: 0, timerMax: 0, answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false });
+    savedResultRef.current.clear();
+    setActiveTab("setup");
+    setHostViewMode("dashboard");
   };
 
   const restoreOrder = async () => {
@@ -788,7 +810,7 @@ export default function HostView() {
   const cancelQuestion = async () => {
     if (!room) return;
     await push({ activeQuestion: null, selectedCellId: "", answerVisibleToHost: false,
-      answerVisibleToParticipants: false, hintVisibleToParticipants: false, questionStatus: "idle" });
+      answerVisibleToParticipants: false, hintVisibleToParticipants: false, questionStatus: "idle", timerRunning:false, timerValue:0, timerMax:0 });
     showToast.info("تم إلغاء السؤال الحالي");
   };
 
@@ -1279,11 +1301,32 @@ export default function HostView() {
 
   const filledCells = room.board.filter(c=>c.question.trim()).length;
   const claimedCells = room.board.filter(c=>c.claimedBy!==0).length;
-  const blueClaimedCells = room.board.filter(c=>c.claimedBy===1).length;
-  const redClaimedCells = room.board.filter(c=>c.claimedBy===2).length;
+  const blueFinalScore = Number.isFinite(room.team1Score) ? room.team1Score : 0;
+  const redFinalScore = Number.isFinite(room.team2Score) ? room.team2Score : 0;
   const usedCells = room.board.filter(c=>c.used).length;
   const totalCells = room.board.length;
   const winningPathIds = room.winnerTeam ? findWinningPath(room.board, room.gridSize, room.winnerTeam as 1|2) : [];
+  const gameMode = room.gameMode || "classic";
+
+  const applyPowerUp = async (kind: "double_points"|"extra_time"|"switch_question") => {
+    if (!room) return;
+    if (kind === "double_points" && room.activeQuestion) {
+      await push({ activePowerUp: "double_points", activeQuestion: { ...room.activeQuestion, points: Math.max(1, (room.activeQuestion.points || 1) * 2) } });
+      showToast.success("تم تفعيل مضاعفة النقاط للسؤال الحالي");
+      return;
+    }
+    if (kind === "extra_time") {
+      await push({ activePowerUp: "extra_time", timerValue: (room.timerValue || 0) + 15, timerSetting: (room.timerSetting || 0) + 15 });
+      showToast.success("تمت إضافة 15 ثانية");
+      return;
+    }
+    if (kind === "switch_question") {
+      await push({ activePowerUp: "switch_question" });
+      await skipQ();
+      showToast.success("تم تفعيل تبديل السؤال");
+    }
+  };
+
   const filteredTemplates = [...STARTER_TEMPLATES, ...communityTemplates]
     .filter(tpl=>!templateSearch || tpl.name.includes(templateSearch))
     .filter(tpl=>!templateCategory || tpl.categories.includes(templateCategory))
@@ -1331,16 +1374,16 @@ export default function HostView() {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.6rem", width:"100%", marginBottom:"1rem" }}>
               <div style={{ background:"#10233f", border:"1px solid #1e3a8a", borderRadius:"10px", padding:"0.6rem" }}>
                 <div style={{ color:"#93c5fd", fontSize:"0.82rem" }}>الفريق الأزرق</div>
-                <div style={{ color:"#dbeafe", fontWeight:800, fontSize:"1.3rem" }}>{blueClaimedCells}</div>
+                <div style={{ color:"#dbeafe", fontWeight:800, fontSize:"1.3rem" }}>{blueFinalScore}</div>
               </div>
               <div style={{ background:"#3f1018", border:"1px solid #991b1b", borderRadius:"10px", padding:"0.6rem" }}>
                 <div style={{ color:"#fda4af", fontSize:"0.82rem" }}>الفريق الأحمر</div>
-                <div style={{ color:"#ffe4e6", fontWeight:800, fontSize:"1.3rem" }}>{redClaimedCells}</div>
+                <div style={{ color:"#ffe4e6", fontWeight:800, fontSize:"1.3rem" }}>{redFinalScore}</div>
               </div>
             </div>
             <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", justifyContent:"center" }}>
               <button className="btn-gold" onClick={resetGame}>إعادة اللعب</button>
-              <button className="btn-secondary" onClick={()=>setActiveTab("setup")}>الرجوع للقوالب</button>
+              <button className="btn-secondary" onClick={returnToTemplates}>الرجوع للقوالب</button>
             </div>
           </div>
         </div>
@@ -1663,6 +1706,18 @@ export default function HostView() {
             <button className="btn-secondary" style={{ fontSize: "0.78rem" }} onClick={() => { if (room) showToast.success("تم حفظ اللعبة"); }}>💾 حفظ اللعبة</button>
             <button className="btn-danger" style={{ fontSize: "0.78rem", marginInlineStart: "auto" }} onClick={endGame}>🏁 إنهاء اللعبة</button>
           </div>
+          <div className="kc-card" style={{ marginBottom:"0.85rem" }}>
+            <div className="section-title">وضع اللعبة والتعزيزات</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"0.5rem", marginBottom:"0.55rem" }}>
+              <select className="kc-input" value={gameMode} onChange={e=>push({ gameMode: e.target.value as any })}>
+                <option value="classic">التحدي الكلاسيكي</option><option value="speed">وضع السرعة</option><option value="points">وضع النقاط</option><option value="connection">وضع الوصلة</option><option value="teacher">وضع المعلم</option><option value="training">وضع التدريب</option>
+              </select>
+              <button className="btn-secondary" onClick={()=>applyPowerUp("double_points")}>مضاعفة النقاط</button>
+              <button className="btn-secondary" onClick={()=>applyPowerUp("extra_time")}>وقت إضافي</button>
+              <button className="btn-secondary" onClick={()=>applyPowerUp("switch_question")}>تبديل السؤال</button>
+            </div>
+            <div style={{ fontSize:"0.78rem", color:"#94a3b8" }}>تعزيزات متاحة للعرض حالياً: سرقة سؤال • حذف خيارين • حماية الحرف (سيتم تفعيل منطقها لاحقاً).</div>
+          </div>
           <div style={{ display:"grid", gridTemplateColumns: presentationMode ? "1fr" : "1fr 1.4fr", gap:"1.25rem" }}>
             {/* Left: controls */}
             {!presentationMode && <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
@@ -1708,16 +1763,18 @@ export default function HostView() {
                   <div style={{ fontSize:"0.8rem", color:"#64748b" }}>ثانية</div>
                   <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
                     {!room.timerRunning
-                      ? <button className="btn-green" style={{ fontSize:"0.8rem" }} onClick={startTimer}>▶ بدء</button>
-                      : <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={pauseTimer}>⏸ إيقاف</button>}
-                    <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={resetTimer}>↺ إعادة</button>
+                      ? <button className="btn-green" style={{ fontSize:"0.8rem" }} onClick={room.timerValue > 0 ? resumeTimer : startTimer}>{room.timerValue > 0 ? "استئناف" : "بدء المؤقت"}</button>
+                      : <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={pauseTimer}>إيقاف مؤقت</button>}
+                    <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={addTimer15}>+15 ثانية</button>
+                    <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={resetTimer}>إعادة</button>
                   </div>
                 </div>
                 <div style={{ display:"flex", gap:"0.4rem", marginTop:"0.5rem", flexWrap:"wrap" }}>
                   {[15,30,45,60,90,120].map(s=>(
                     <button key={s} className="btn-secondary" style={{ fontSize:"0.72rem", padding:"0.2rem 0.55rem" }}
-                      onClick={()=>push({ timerSetting:s, timerValue:s, timerRunning:false })}>{s}ث</button>
+                      onClick={()=>push({ timerSetting:s, timerValue:0, timerMax:s, timerRunning:false })}>{s}ث</button>
                   ))}
+                  <span style={{ fontSize:"0.75rem", color:"#94a3b8", alignSelf:"center" }}>{room.timerSetting <= 0 ? "بدون مؤقت" : ""}</span>
                 </div>
               </div>
 
