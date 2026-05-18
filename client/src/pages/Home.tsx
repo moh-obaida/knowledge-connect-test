@@ -68,7 +68,7 @@ export default function Home() {
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.8rem", flexWrap: "wrap", color: "#fff" }}>
           <KcLogo light subtitle="لعبة صفية عربية للحروف والأسئلة" />
           <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
-            <button className="btn-secondary" style={{ background: "rgba(255,255,255,0.14)", color: "#fff", borderColor: "rgba(255,255,255,0.28)" }} onClick={() => setLocation("/join")}>عرض شاشة الطلاب</button>
+            <button className="btn-secondary" style={{ background: "rgba(255,255,255,0.14)", color: "#fff", borderColor: "rgba(255,255,255,0.28)" }} onClick={() => setLocation("/join")}>صفحة انضمام الطلاب</button>
             <button className="btn-gold" onClick={goHost}>دخول شاشة المعلم</button>
           </div>
         </header>
@@ -84,7 +84,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap", marginTop: "1.1rem" }}>
               <button className="btn-gold" style={{ fontSize: "1.05rem", padding: "0.85rem 1.5rem" }} onClick={goHost}>ابدأ لعبة جديدة</button>
               <button className="btn-secondary" style={lightButton} onClick={goHost}>دخول شاشة المعلم</button>
-              <button className="btn-secondary" style={lightButton} onClick={() => setLocation("/join")}>عرض شاشة الطلاب</button>
+              <button className="btn-secondary" style={lightButton} onClick={() => setLocation("/join")}>صفحة انضمام الطلاب</button>
               <button className="btn-secondary" style={lightButton} onClick={showGuide}>شاهد الدليل السريع</button>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "0.55rem", marginTop: "1.25rem" }}>

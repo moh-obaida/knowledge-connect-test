@@ -30,7 +30,7 @@ export default function ResultPreviewModal({ result, onClose, onCopySummary, onE
           <div style={{ fontSize: "1.4rem", fontWeight: 900, color: winnerColor }}>{result.winnerName}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", marginBottom: "0.85rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.6rem", marginBottom: "0.85rem" }}>
           <div style={{ background: "#141e2d", borderRadius: 10, padding: "0.6rem", border: `1.5px solid ${result.team1.color}55` }}>
             <div style={{ fontSize: "0.74rem", color: result.team1.color, fontWeight: 700 }}>{result.team1.name}</div>
             <div style={{ fontWeight: 900, color: "#f0ede8", fontSize: "1.4rem" }}>{result.team1.score}</div>

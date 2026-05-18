@@ -78,6 +78,12 @@ export default function LiveQuestionModal({
               <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0ede8", lineHeight: 1.7, direction: "rtl" }}>{activeQuestion!.question}</div>
             </div>
 
+            {activeQuestion!.imageUrl && (
+              <div style={{ marginBottom: "0.65rem", borderRadius: 12, overflow: "hidden", border: "1px solid #1a2332", background: "#0f1623" }}>
+                <img src={activeQuestion!.imageUrl} alt="صورة السؤال" style={{ display: "block", width: "100%", maxHeight: 240, objectFit: "contain" }} />
+              </div>
+            )}
+
             {isMcq && Array.isArray(activeQuestion!.choices) && activeQuestion!.choices!.length > 0 && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.4rem", marginBottom: "0.65rem" }}>
                 {activeQuestion!.choices!.map((c, i) => (

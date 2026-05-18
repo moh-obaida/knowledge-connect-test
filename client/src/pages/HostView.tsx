@@ -23,7 +23,7 @@ import {
   rebuildBoardPreservingBanks,
   syncBoardCellLetters,
   type ArabicLetterSet,
-  type RoomState, type BoardCell, type ActiveQuestion, type Player, type GameEventType,
+  type RoomState, type BoardCell, type ActiveQuestion, type Player, type GameEventType, type StoredQuestionItem,
 } from "../lib/store";
 import HexBoard from "../components/HexBoard";
 import { showToast } from "../components/KcToast";
@@ -51,6 +51,36 @@ import type { WorkBook } from "xlsx";
 const BASE_URL = (import.meta.env.VITE_PUBLIC_APP_URL as string) || window.location.origin;
 const joinLink = (code: string) => `${BASE_URL}/join?room=${code}`;
 const displayLink = (code: string) => `${BASE_URL}/display?room=${code}`;
+
+function buildActiveQuestion(cell: BoardCell, item: StoredQuestionItem): ActiveQuestion {
+  const qType = item.type || "fill";
+  const choices =
+    qType === "mcq" && Array.isArray(item.choices)
+      ? item.choices.filter((choice) => typeof choice === "string" && choice.trim())
+      : qType === "tf"
+        ? ["صح", "خطأ"]
+        : undefined;
+  const answer = qType === "tf" ? normalizeTfCanonical(item.answer) || item.answer : item.answer;
+
+  return {
+    cellId: cell.id,
+    cellLabel: getCellDisplayLetter(cell),
+    letterKey: getBoardLetterKey(cell),
+    questionLetter: getQuestionLetter(cell),
+    questionId: item.id,
+    roundId: newQuestionId(),
+    question: item.question,
+    answer,
+    category: item.category,
+    difficulty: item.difficulty,
+    points: item.points || 1,
+    hint: item.hint || "",
+    explanation: item.explanation || "",
+    type: qType,
+    imageUrl: item.imageUrl || "",
+    ...(choices ? { choices } : {}),
+  };
+}
 
 function copyText(text: string, label: string) {
   navigator.clipboard.writeText(text)
@@ -198,7 +228,7 @@ function CellEditor({ cell, onSave, onClose }: {
                 <div key={i} style={{ display:"flex", gap:"0.35rem", alignItems:"center" }}>
                   <button className="btn-secondary" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>loadEditing(item, i)}>تعديل</button>
                   <button className="btn-secondary" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>{ const ck = getBoardLetterKey(cell); const copy = { ...item, id: newQuestionId(), letterKey: ck, letter: getCellDisplayLetter(cell), question: `${item.question} - نسخة` }; const next = [...questionBank.slice(0, i + 1), copy, ...questionBank.slice(i + 1)]; setQuestionBank(next); const enriched = next.map((it)=>({ ...it, id: (it as any).id || newQuestionId(), letterKey: ck, letter: getCellDisplayLetter(cell) })); const first=enriched[0]; onSave({ question:first.question, answer:first.answer, category:first.category, difficulty:first.difficulty, points:first.points, hint:first.hint, explanation:first.explanation, ...( { questionBank: enriched } as any)}); showToast.success("تم نسخ السؤال بنجاح."); }}>نسخ</button>
-                  <button className="btn-danger" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>{ const ck = getBoardLetterKey(cell); const next=questionBank.filter((_,ix)=>ix!==i); setQuestionBank(next); const enriched = next.map((it)=>({ ...it, id: (it as any).id || newQuestionId(), letterKey: ck, letter: getCellDisplayLetter(cell) })); const first=enriched[0]; onSave(first?{ question:first.question, answer:first.answer, category:first.category, difficulty:first.difficulty, points:first.points, hint:first.hint, explanation:first.explanation, ...( { questionBank: enriched } as any)}:{ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"", ...( { questionBank: [] } as any)}); }}>حذف</button>
+                  <button className="btn-danger" style={{ fontSize:"0.68rem", padding:"0.2rem 0.45rem" }} onClick={()=>{ if (!window.confirm("هل تريد حذف هذا السؤال من حرف اللوحة؟")) return; const ck = getBoardLetterKey(cell); const next=questionBank.filter((_,ix)=>ix!==i); setQuestionBank(next); const enriched = next.map((it)=>({ ...it, id: (it as any).id || newQuestionId(), letterKey: ck, letter: getCellDisplayLetter(cell) })); const first=enriched[0]; onSave(first?{ question:first.question, answer:first.answer, category:first.category, difficulty:first.difficulty, points:first.points, hint:first.hint, explanation:first.explanation, ...( { questionBank: enriched } as any)}:{ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"", ...( { questionBank: [] } as any)}); showToast.success("تم حذف السؤال."); }}>حذف</button>
                   <span style={{ fontSize:"0.65rem", padding:"0.1rem 0.4rem", borderRadius:9999, background:"#0f1623", color:"#94a3b8" }}>
                     {item.type === "mcq" ? "اختيار من متعدد" : item.type === "tf" ? "صح/خطأ" : "إجابة قصيرة"}
                   </span>
@@ -312,7 +342,7 @@ function CellEditor({ cell, onSave, onClose }: {
           </div>
           <div style={{ display:"flex", gap:"0.75rem", paddingTop:"0.5rem" }}>
             <button className="btn-gold" style={{ flex:1 }} onClick={save}>💾 حفظ السؤال</button>
-            <button className="btn-danger" onClick={()=>onSave({ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"" })}>مسح</button>
+            <button className="btn-danger" onClick={()=>{ if (!window.confirm(`هل تريد مسح كل أسئلة الحرف "${getCellDisplayLetter(cell)}"؟`)) return; setQuestionBank([]); setEditingIndex(-1); onSave({ question:"", answer:"", category:"", difficulty:"easy", points:1, hint:"", explanation:"", ...( { questionBank: [] } as any) }); showToast.success("تم مسح أسئلة الحرف."); }}>مسح الكل</button>
             <button className="btn-secondary" onClick={onClose}>إلغاء</button>
           </div>
         </div>
@@ -701,35 +731,9 @@ export default function HostView() {
         });
         return;
       }
-      const first = bank[0];
-      const fType = (first?.type === "mcq" || first?.type === "tf") ? first.type : "fill";
-      const fChoices =
-        fType === "mcq" && Array.isArray(first?.choices)
-          ? first.choices.filter((c) => typeof c === "string")
-          : fType === "tf"
-            ? ["صح", "خطأ"]
-            : undefined;
       const disp = getCellDisplayLetter(cell);
-      const lk = getBoardLetterKey(cell);
       const qLetter = getQuestionLetter(cell);
-      const tfAns = fType === "tf" ? normalizeTfCanonical(first.answer) || first.answer : first.answer;
-      const aq: ActiveQuestion = {
-        cellId: cell.id,
-        cellLabel: disp,
-        letterKey: lk,
-        questionLetter: qLetter,
-        questionId: first.id,
-        roundId: newQuestionId(),
-        question: first.question,
-        answer: tfAns,
-        category: first.category,
-        difficulty: first.difficulty,
-        points: first.points,
-        hint: first.hint,
-        explanation: first.explanation,
-        type: fType,
-        ...(fChoices ? { choices: fChoices } : {}),
-      };
+      const aq = buildActiveQuestion(cell, bank[0]);
       push({
         activeQuestion: aq, selectedCellId: cell.id,
         answerVisibleToHost: false, answerVisibleToParticipants: false,
@@ -762,15 +766,15 @@ export default function HostView() {
       const pts = room.activeQuestion?.points || 1;
       const scoreUp = team===1 ? { team1Score: room.team1Score+pts } : { team2Score: room.team2Score+pts };
       undoStackRef.current.push({ type: "claim", cellId, team, points: pts, previousActiveTeam: room.activeTeam });
-      const winner = checkWinner(nb, room.gridSize);
-      const winMsg = winner===1 ? "فاز الفريق الأزرق!" : winner===2 ? "فاز الفريق الأحمر!" : "";
+      const winner = room.winningMode === "path" ? checkWinner(nb, room.gridSize) : 0;
+      const winMsg = winner===1 ? `فاز ${room.team1.name}!` : winner===2 ? `فاز ${room.team2.name}!` : "";
       const claimedLetter = getCellDisplayLetter(current);
       const claimedKey = getQuestionLetter(current);
       const eventUpdates = eventsPatch([
         {
           type: "cell_claimed",
           message: `حصل ${team === 1 ? room.team1.name : room.team2.name} على الحرف ${claimedLetter}.`,
-          details: { teamId: team, cellId, letter: claimedKey, questionId: room.activeQuestion?.cellId },
+          details: { teamId: team, cellId, letter: claimedKey, questionId: room.activeQuestion?.questionId },
         },
         ...(winMsg ? [{
           type: "game_ended" as const,
@@ -841,8 +845,16 @@ export default function HostView() {
       const t1 = Number.isFinite(room.team1Score) ? room.team1Score : 0;
       const t2 = Number.isFinite(room.team2Score) ? room.team2Score : 0;
       const pathWinner = checkWinner(room.board, room.gridSize);
-      const winner: 0 | 1 | 2 = gameMode === "connection" ? pathWinner : (t1 > t2 ? 1 : t2 > t1 ? 2 : 0);
-      const msg = winner === 1 ? `🏆 ${room.team1.name} فاز!` : winner === 2 ? `🏆 ${room.team2.name} فاز!` : "🤝 تعادل!";
+      const pointsWinner: 0 | 1 | 2 = t1 > t2 ? 1 : t2 > t1 ? 2 : 0;
+      const winner: 0 | 1 | 2 =
+        room.winningMode === "path" ? pathWinner : room.winningMode === "points" ? pointsWinner : 0;
+      const msg = winner === 1
+        ? `🏆 ${room.team1.name} فاز!`
+        : winner === 2
+          ? `🏆 ${room.team2.name} فاز!`
+          : room.winningMode === "manual"
+            ? "تم إنهاء اللعبة دون إعلان فائز."
+            : "🤝 تعادل!";
       await push({
         winnerMessage: msg,
         winnerTeam: winner,
@@ -889,18 +901,18 @@ export default function HostView() {
       const idx = Math.max(0, bank.findIndex((q)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
       const next = bank[idx+1];
       if (next) {
-        const nType = (next.type === "mcq" || next.type === "tf") ? next.type : "fill";
-        const nChoices = nType === "mcq" && Array.isArray(next.choices) ? next.choices.filter((c)=>typeof c === "string") : nType === "tf" ? ["صح","خطأ"] : undefined;
-        const nAns = nType === "tf" ? normalizeTfCanonical(next.answer) || next.answer : next.answer;
         await push({
-          activeQuestion: { ...room.activeQuestion, roundId: newQuestionId(), questionId: next.id, question: next.question, answer: nAns, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "", type: nType, ...(nChoices ? { choices: nChoices } : { choices: [] }) },
+          activeQuestion: buildActiveQuestion(cell!, next),
           answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
-          questionStatus:"active", timerRunning:false, timerValue: room.timerSetting,
+          questionStatus:"active",
+          timerValue: room.timerSetting > 0 ? room.timerSetting : 0,
+          timerMax: room.timerSetting > 0 ? room.timerSetting : 0,
+          timerRunning: room.timerSetting > 0,
         });
         return;
       }
     }
-    await push({ activeQuestion:null, selectedCellId:"", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false, questionStatus:"idle", timerRunning:false });
+    await push({ activeQuestion:null, selectedCellId:"", answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false, questionStatus:"idle", timerRunning:false, timerValue:0, timerMax:0 });
   };
   const skipQ = async () => {
     if (!room || answerActionBusy) return;
@@ -911,13 +923,13 @@ export default function HostView() {
       const idx = Math.max(0, bank.findIndex((q)=>q.question===room.activeQuestion?.question && q.answer===room.activeQuestion?.answer));
       const next = bank[idx+1];
       if (next) {
-        const nType = (next.type === "mcq" || next.type === "tf") ? next.type : "fill";
-        const nChoices = nType === "mcq" && Array.isArray(next.choices) ? next.choices.filter((c)=>typeof c === "string") : nType === "tf" ? ["صح","خطأ"] : undefined;
-        const nAns = nType === "tf" ? normalizeTfCanonical(next.answer) || next.answer : next.answer;
         await push({
-          activeQuestion: { ...room.activeQuestion, roundId: newQuestionId(), questionId: next.id, question: next.question, answer: nAns, category: next.category, difficulty: next.difficulty, points: next.points || 1, hint: next.hint || "", explanation: next.explanation || "", type: nType, ...(nChoices ? { choices: nChoices } : { choices: [] }) },
+          activeQuestion: buildActiveQuestion(cell!, next),
           answerVisibleToHost:false, answerVisibleToParticipants:false, hintVisibleToParticipants:false,
-          questionStatus:"skipped", timerRunning:false, timerValue: room.timerSetting,
+          questionStatus:"skipped",
+          timerValue: room.timerSetting > 0 ? room.timerSetting : 0,
+          timerMax: room.timerSetting > 0 ? room.timerSetting : 0,
+          timerRunning: room.timerSetting > 0,
           ...eventPatch("question_skipped", `تم تخطي سؤال الحرف ${room.activeQuestion.cellLabel}.`, { cellId: room.activeQuestion.cellId, letter: room.activeQuestion.questionLetter || room.activeQuestion.cellLabel }),
         });
         setAnswerActionBusy(false);
@@ -931,6 +943,9 @@ export default function HostView() {
       answerVisibleToHost:false,
       answerVisibleToParticipants:false,
       hintVisibleToParticipants:false,
+      timerRunning:false,
+      timerValue:0,
+      timerMax:0,
       ...(room.activeQuestion ? eventPatch("question_skipped", `تم تخطي سؤال الحرف ${room.activeQuestion.cellLabel}.`, { cellId: room.activeQuestion.cellId, letter: room.activeQuestion.questionLetter || room.activeQuestion.cellLabel }) : {}),
     });
     setHostAnswer("");
@@ -965,7 +980,7 @@ export default function HostView() {
   const startTimer = () => {
     if (!room) return;
     if (room.timerSetting <= 0) { showToast.info("بدون مؤقت"); return; }
-    push({ timerRunning:true, timerMax: room.timerSetting });
+    push({ timerRunning:true, timerValue: room.timerValue > 0 ? room.timerValue : room.timerSetting, timerMax: room.timerSetting });
   };
   const pauseTimer = () => push({ timerRunning:false });
   const resumeTimer = () => { if (!room || room.timerValue <= 0) return; push({ timerRunning:true }); };
@@ -1012,7 +1027,7 @@ export default function HostView() {
     const empty = room.board.filter(c=>!cellHasQuestions(c)).length;
     if (empty>0) {
       confirm(`بعض الحروف لا تحتوي على أسئلة (${empty} حرف). هل تريد المتابعة؟`,
-        async () => { await push({ gameStatus:"active", ...eventPatch("game_started", "بدأت اللعبة.") }); setActiveTab("game"); });
+        async () => { await push({ gameStatus:"active", ...eventPatch("game_started", "بدأت اللعبة.") }); showToast.success("بدأت اللعبة! 🎮"); setActiveTab("game"); });
     } else {
       await push({ gameStatus:"active", ...eventPatch("game_started", "بدأت اللعبة.") });
       showToast.success("بدأت اللعبة! 🎮");
@@ -1073,12 +1088,12 @@ export default function HostView() {
   const exportBoard = () => {
     if (!room) return;
     exportBoardToXlsx(room.board, `wasla-board-${roomCode}-full`, room.questionBankByLetter || {}, "full_bank");
-    showToast.success("تم تصدير كل بنك الأسئلة (Excel)");
+    showToast.success("تم تصدير كل بنك الأسئلة بصيغة إكسل.");
   };
   const exportBoardCurrentLetters = () => {
     if (!room) return;
     exportBoardToXlsx(room.board, `wasla-board-${roomCode}-لوحة`, room.questionBankByLetter || {}, "board_only");
-    showToast.success("تم تصدير حروف اللوحة الحالية فقط (Excel)");
+    showToast.success("تم تصدير حروف اللوحة الحالية فقط بصيغة إكسل.");
   };
 
   const runExcelImportWithWorkbook = async (wb: WorkBook, mode: BoardImportMode) => {
@@ -1101,13 +1116,13 @@ export default function HostView() {
       for (const w of summary.warnings.slice(0, 3)) showToast.warning(w);
       if (summary.warnings.length > 3) showToast.warning(`و${summary.warnings.length - 3} تحذيرات أخرى.`);
     } catch {
-      showToast.error("تعذر الاستيراد. تأكد من ورقة Board والأعمدة.");
+      showToast.error("تعذر الاستيراد. تأكد من ورقة اللوحة والأعمدة المطلوبة.");
     }
   };
 
   const openExcelImportPicker = (defaultMode: BoardImportMode) => {
     if (!room) {
-      showToast.warning("أنشئ لعبة أو افتح غرفة أولاً ثم استورد ملف Excel.");
+      showToast.warning("أنشئ لعبة أو افتح غرفة أولاً ثم استورد ملف إكسل.");
       return;
     }
     const input = document.createElement("input");
@@ -1271,9 +1286,9 @@ export default function HostView() {
       level: tpl.level,
       boardBanks: tpl.boardBanks,
     });
-    showToast.success("تم تصدير القالب بصيغة Excel");
+    showToast.success("تم تصدير القالب بصيغة إكسل.");
   };
-  /** استيراد قالب جديد إلى «قوالب المجتمع» من ملف Excel (ليس استبدال اللوحة الحالية). */
+  /** استيراد قالب جديد إلى «قوالب المجتمع» من ملف إكسل (ليس استبدال اللوحة الحالية). */
   const importTemplate = () => {
     const input = document.createElement("input"); input.type = "file"; input.accept = ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     input.onchange = async e => {
@@ -1306,9 +1321,9 @@ export default function HostView() {
             .join(" — ");
           showToast.info(`تم العثور على الأسئلة التالية: ${summary}`);
         }
-        showToast.success("تم استيراد القالب من Excel بنجاح.");
+        showToast.success("تم استيراد القالب من ملف إكسل بنجاح.");
       } catch {
-        showToast.error("تعذر استيراد القالب. استخدم ملف Excel مُصدَّرًا من التطبيق أو راجع أوراق «Questions» و«Meta».");
+        showToast.error("تعذر استيراد القالب. استخدم ملف إكسل مُصدَّرًا من التطبيق أو راجع أوراق «الأسئلة» و«البيانات».");
       }
     };
     input.click();
@@ -1387,13 +1402,13 @@ export default function HostView() {
       const blob = new Blob([exportResultsJSON()], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = "wasla-results.json"; a.click(); URL.revokeObjectURL(url);
-      showToast.success("تم تصدير كل النتائج (JSON).");
+      showToast.success("تم تصدير كل النتائج كملف بيانات.");
     };
     const exportAllCSV = () => {
       const blob = new Blob([exportResultsCSV()], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = "wasla-results.csv"; a.click(); URL.revokeObjectURL(url);
-      showToast.success("تم تصدير كل النتائج (CSV).");
+      showToast.success("تم تصدير كل النتائج كجدول.");
     };
     return (
       <div dir="rtl" style={{ minHeight:"100vh", background:"radial-gradient(circle at 78% 0%, rgba(245,158,11,0.18), transparent 28%), radial-gradient(circle at 12% 16%, rgba(37,99,235,0.2), transparent 34%), linear-gradient(160deg,#fff7ed 0%,#eef2ff 52%,#f8fafc 100%)", padding:"1rem", color:"#0f172a" }}>
@@ -1572,8 +1587,8 @@ export default function HostView() {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"0.5rem", marginBottom:"0.6rem" }}>
               <div style={{ color:"#94a3b8", fontSize:"0.84rem" }}>سجل النتائج المحلية للتحديات. <span style={{ color:"#64748b" }}>(تُحفظ على هذا الجهاز فقط)</span></div>
               <div style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}>
-                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllJSON}>تصدير JSON</button>
-                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllCSV}>تصدير CSV</button>
+                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllJSON}>تصدير ملف بيانات</button>
+                <button className="btn-secondary" disabled={!savedResults.length} onClick={exportAllCSV}>تصدير جدول النتائج</button>
               </div>
             </div>
             {savedResults.length === 0 ? (
@@ -1646,7 +1661,7 @@ export default function HostView() {
           {dashboardTab==="settings" && <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))", gap:"0.7rem" }}>
             <div className="kc-card"><div className="section-title">بيانات المضيف</div><label style={lbl}>اسم المضيف</label><input className="kc-input" value={dashboardHostName} onChange={e=>setDashboardHostName(e.target.value)} /><label style={lbl}>اسم الصف أو الفعالية</label><input className="kc-input" value={dashboardClassName} onChange={e=>setDashboardClassName(e.target.value)} /><label style={lbl}>اسم المدرسة أو الجهة</label><input className="kc-input" value={dashboardOrgName} onChange={e=>setDashboardOrgName(e.target.value)} /><button className="btn-gold" onClick={()=>{ localStorage.setItem("kc_host_profile", JSON.stringify({ hostName:dashboardHostName.trim(), className:dashboardClassName.trim(), orgName:dashboardOrgName.trim() })); showToast.success("تم حفظ الإعدادات."); }}>حفظ البيانات</button></div>
             <div className="kc-card"><div className="section-title">إعدادات اللعبة السريعة</div><div style={{ color:"#94a3b8", fontSize:"0.82rem", marginBottom:"0.4rem" }}>اسم الفريق الأزرق: {room?.team1.name || "الفريق الأزرق"}</div><div style={{ color:"#94a3b8", fontSize:"0.82rem", marginBottom:"0.4rem" }}>اسم الفريق الأحمر: {room?.team2.name || "الفريق الأحمر"}</div><div style={{ display:"flex", gap:"0.35rem", flexWrap:"wrap" }}><button className="btn-secondary" onClick={()=>room ? push({ timerSetting:30, timerValue:0, timerMax:30, timerRunning:false }) : showToast.info("أنشئ لعبة أولاً لتطبيق إعداد المؤقت.")}>مؤقت ٣٠ث</button><button className="btn-secondary" onClick={()=>room ? push({ timerSetting:60, timerValue:0, timerMax:60, timerRunning:false }) : showToast.info("أنشئ لعبة أولاً لتطبيق إعداد المؤقت.")}>مؤقت ٦٠ث</button><button className="btn-secondary" onClick={()=>room ? push({ stealMode:"steal" }) : showToast.info("أنشئ لعبة أولاً لتفعيل السرقة.")}>تفعيل السرقة</button><button className="btn-secondary" onClick={()=>room ? push({ answerVisibleToHost:false, answerVisibleToParticipants:false }) : showToast.info("أنشئ لعبة أولاً لتعديل عرض الإجابة.")}>إخفاء الإجابة</button></div></div>
-            <div className="kc-card"><div className="section-title">البيانات المحلية</div><div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}><button className="btn-secondary" onClick={()=>{ const blob = new Blob([JSON.stringify({ communityTemplates, hostProfile: { hostName:dashboardHostName, className:dashboardClassName, orgName:dashboardOrgName } }, null, 2)], { type:"application/json" }); const url = URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="knowledge-connect-local-data.json"; a.click(); URL.revokeObjectURL(url); }}>تصدير البيانات</button><button className="btn-danger" onClick={()=>confirm("هل أنت متأكد من حذف البيانات المحلية؟", ()=>{ localStorage.removeItem(COMMUNITY_TEMPLATES_KEY); showToast.success("تم حذف البيانات المحلية."); setCommunityTemplates([]); })}>حذف البيانات المحلية</button></div></div>
+            <div className="kc-card"><div className="section-title">البيانات المحلية</div><div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}><button className="btn-secondary" onClick={()=>{ const blob = new Blob([JSON.stringify({ communityTemplates, hostProfile: { hostName:dashboardHostName, className:dashboardClassName, orgName:dashboardOrgName } }, null, 2)], { type:"application/json" }); const url = URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="knowledge-connect-local-data.json"; a.click(); URL.revokeObjectURL(url); showToast.success("تم تصدير البيانات المحلية."); }}>تصدير البيانات</button><button className="btn-danger" onClick={()=>confirm("هل أنت متأكد من حذف البيانات المحلية؟", ()=>{ localStorage.removeItem(COMMUNITY_TEMPLATES_KEY); showToast.success("تم حذف البيانات المحلية."); setCommunityTemplates([]); })}>حذف البيانات المحلية</button></div></div>
           </div>}
         </div>
       </div>
@@ -1727,7 +1742,7 @@ export default function HostView() {
       {excelImportWizard && room && (
         <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => setExcelImportWizard(null)}>
           <div className="modal-box" style={{ maxWidth: 520, maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 800, marginBottom: "0.75rem", color: "#f59e0b" }}>معاينة استيراد Excel</div>
+            <div style={{ fontWeight: 800, marginBottom: "0.75rem", color: "#f59e0b" }}>معاينة استيراد ملف إكسل</div>
             <div style={{ fontSize: "0.85rem", color: "#94a3b8", marginBottom: "0.5rem", lineHeight: 1.7 }}>
               صفوف صالحة: {excelImportWizard.preview.parsed.rows.length} • متخطاة (حرف): {excelImportWizard.preview.parsed.skippedEmptyLetter} • متخطاة (سؤال/إجابة): {excelImportWizard.preview.parsed.skippedMissingQa}
             </div>
@@ -1796,7 +1811,7 @@ export default function HostView() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <button type="button" className="btn-gold" onClick={() => { setEditingCell(emptyQuestionsCell); setEmptyQuestionsCell(null); setLiveCellId(""); }}>إضافة سؤال لهذا الحرف</button>
-              <button type="button" className="btn-secondary" onClick={() => { setEmptyQuestionsCell(null); openExcelImportPicker("merge"); }}>استيراد أسئلة (Excel)</button>
+              <button type="button" className="btn-secondary" onClick={() => { setEmptyQuestionsCell(null); openExcelImportPicker("merge"); }}>استيراد أسئلة (إكسل)</button>
               <button type="button" className="btn-secondary" onClick={() => setEmptyQuestionsCell(null)}>إغلاق</button>
             </div>
           </div>
@@ -1943,8 +1958,8 @@ export default function HostView() {
               ))}
               <div style={{ display:"flex", gap:"0.45rem", flexWrap:"wrap", alignItems:"center" }}>
                 <button className="btn-gold" style={{ fontSize:"0.8rem" }} onClick={handleCreate}>إنشاء لعبة جديدة</button>
-                <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>setActiveTab("game")}>بدء الاستضافة</button>
-                <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>setTemplateSearch("")}>استكشاف القوالب</button>
+                <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={startGame}>بدء الاستضافة</button>
+                <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={()=>{ setTemplateSearch(""); document.getElementById("room-templates")?.scrollIntoView({ behavior:"smooth", block:"start" }); }}>استكشاف القوالب</button>
                 <button className="btn-secondary" style={{ fontSize:"0.8rem" }} onClick={importBoard}>استيراد لعبة</button>
               </div>
             </div>
@@ -1967,7 +1982,7 @@ export default function HostView() {
                 ))}
               </div>
               <div style={{ display:"flex", gap:"0.45rem", flexWrap:"wrap", marginTop:"0.85rem" }}>
-                <button className="btn-secondary" onClick={()=>setTemplateSearch("")}>قالب جاهز</button>
+                <button className="btn-secondary" onClick={()=>{ setTemplateSearch(""); document.getElementById("room-templates")?.scrollIntoView({ behavior:"smooth", block:"start" }); }}>قالب جاهز</button>
                 <button className="btn-secondary" onClick={()=>setActiveTab("settings")}>إعداد الفرق والمؤقت</button>
                 <button className="btn-gold" onClick={startGame}>ابدأ اللعبة</button>
               </div>
@@ -2189,7 +2204,7 @@ export default function HostView() {
               </div>
             </div>
 
-            <div className="kc-card" style={{ gridColumn:"1 / -1" }}>
+            <div id="room-templates" className="kc-card" style={{ gridColumn:"1 / -1", scrollMarginTop:"1rem" }}>
               <div className="section-title">قوالب الألعاب</div>
               <div style={{ fontSize:"0.82rem", color:"#94a3b8", marginBottom:"0.8rem" }}>
                 قوالب تجريبية محلية للاستخدام السريع داخل وصلة المعرفة.
@@ -2198,8 +2213,8 @@ export default function HostView() {
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="اسم القالب" value={templateName} onChange={e=>setTemplateName(e.target.value)} />
                 <button className="btn-gold" onClick={saveCurrentAsTemplate}>حفظ كقالب</button>
-                <button className="btn-secondary" onClick={importTemplate}>استيراد قالب (Excel)</button>
-                <button className="btn-secondary" onClick={importBoardFromExcel}>استيراد لوحة (Excel)</button>
+              <button className="btn-secondary" onClick={importTemplate}>استيراد قالب (إكسل)</button>
+              <button className="btn-secondary" onClick={importBoardFromExcel}>استيراد لوحة (إكسل)</button>
               </div>
               <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"0.75rem" }}>
                 <input className="kc-input" style={{ maxWidth:240 }} placeholder="بحث عن قالب" value={templateSearch} onChange={e=>setTemplateSearch(e.target.value)} />
@@ -2233,7 +2248,7 @@ export default function HostView() {
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>setPreviewTemplate(tpl)}>معاينة</button>
                       <button className="btn-gold" style={{ fontSize:"0.75rem" }} onClick={()=>useTemplate(tpl)}>استخدم القالب</button>
                       <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>duplicateTemplate(tpl)}>تعديل نسخة</button>
-                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير Excel</button>
+                      <button className="btn-secondary" style={{ fontSize:"0.75rem" }} onClick={()=>exportTemplate(tpl)}>تصدير إكسل</button>
                       {tpl.userCreated && <button className="btn-danger" style={{ fontSize:"0.75rem" }} onClick={()=>deleteTemplate(tpl)}>حذف القالب</button>}
                     </div>
                   </div>
@@ -2268,9 +2283,9 @@ export default function HostView() {
               <button className="btn-secondary" onClick={()=>applyPowerUp("extra_time")}>وقت إضافي</button>
               <button className="btn-secondary" onClick={()=>applyPowerUp("switch_question")}>تبديل السؤال</button>
             </div>
-            <div style={{ fontSize:"0.78rem", color:"#94a3b8" }}>تعزيزات متاحة للعرض حالياً: سرقة سؤال • حذف خيارين • حماية الحرف (سيتم تفعيل منطقها لاحقاً).</div>
+            <div style={{ fontSize:"0.78rem", color:"#94a3b8" }}>استخدم التعزيزات عند وجود سؤال نشط: مضاعفة النقاط، إضافة وقت، أو الانتقال للسؤال التالي.</div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns: presentationMode ? "1fr" : "1fr 1.4fr", gap:"1.25rem" }}>
+          <div className="responsive-game-layout" style={{ display:"grid", gridTemplateColumns: presentationMode ? "1fr" : "1fr 1.4fr", gap:"1.25rem" }}>
             {/* Left: controls */}
             {!presentationMode && <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
               {/* Teams */}
@@ -2358,6 +2373,11 @@ export default function HostView() {
                     <div style={{ fontSize:"1rem", fontWeight:700, color:"#f0ede8", lineHeight:1.7, marginBottom:"0.5rem" }}>
                       {room.activeQuestion.question}
                     </div>
+                    {room.activeQuestion.imageUrl && (
+                      <div style={{ marginBottom:"0.6rem", borderRadius:12, overflow:"hidden", border:"1.5px solid #1a2332", background:"#0f1623" }}>
+                        <img src={room.activeQuestion.imageUrl} alt="صورة السؤال" style={{ display:"block", width:"100%", maxHeight:240, objectFit:"contain" }} />
+                      </div>
+                    )}
                     {/* Type-specific quick options */}
                     {(room.activeQuestion.type === "mcq" && Array.isArray(room.activeQuestion.choices) && room.activeQuestion.choices.length > 0) && (
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px,1fr))", gap:"0.4rem", marginBottom:"0.6rem" }}>
@@ -2503,7 +2523,7 @@ function SettingsTab({ room, push, roomCode }: { room: RoomState; push: (u: Part
   const [settingsSection, setSettingsSection] = useState<"teams"|"game"|"players"|"links"|"danger">("teams");
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"1.25rem" }}>
+    <div className="responsive-settings-layout" style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"1.25rem" }}>
       {/* Side nav */}
       <div className="kc-card" style={{ padding:"0.75rem", height:"fit-content" }}>
         {([
@@ -2551,9 +2571,10 @@ function TeamsSettings({ room, push }: { room: RoomState; push: (u: Partial<Room
   };
   const addMember = async (teamId: 1|2) => {
     const name = newMember[teamId].trim();
-    if (!name) return;
+    if (!name) { showToast.warning("يرجى إدخال اسم العضو."); return; }
     await updateMembers(teamId, (arr) => [...arr, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2,6)}`, name, status: "pending", star: false }]);
     setNewMember(prev => ({ ...prev, [teamId]: "" }));
+    showToast.success("تمت إضافة العضو.");
   };
   const setMemberStatus = async (teamId: 1|2, memberId: string, status: "present"|"absent"|"pending") => {
     await updateMembers(teamId, (arr) => arr.map((m) => m.id === memberId ? { ...m, status } : m));
@@ -2562,9 +2583,12 @@ function TeamsSettings({ room, push }: { room: RoomState; push: (u: Partial<Room
     await updateMembers(teamId, (arr) => arr.map((m) => ({ ...m, star: m.id === memberId ? !m.star : false })));
     showToast.success("تم اختيار نجم الفريق");
   };
-  const removeMember = async (teamId: 1|2, memberId: string) => updateMembers(teamId, (arr) => arr.filter((m) => m.id !== memberId));
+  const removeMember = async (teamId: 1|2, memberId: string) => {
+    await updateMembers(teamId, (arr) => arr.filter((m) => m.id !== memberId));
+    showToast.success("تمت إزالة العضو.");
+  };
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1.25rem" }}>
+    <div className="responsive-two-col" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1.25rem" }}>
       {[{ label:"الفريق الأول", t:t1, setT:setT1, key:"team1" as const },
         { label:"الفريق الثاني", t:t2, setT:setT2, key:"team2" as const }].map(({ label, t, setT, key }, idx)=>(
         <div key={key} className="kc-card">
@@ -2573,7 +2597,7 @@ function TeamsSettings({ room, push }: { room: RoomState; push: (u: Partial<Room
             <div><label style={lbl2}>اسم الفريق</label><input value={t.name} onChange={e=>setT({...t,name:e.target.value})} className="kc-input" /></div>
             <div><label style={lbl2}>الأحرف الأولى</label><input value={t.initials} onChange={e=>setT({...t,initials:e.target.value})} maxLength={3} className="kc-input" /></div>
             <div><label style={lbl2}>لون الفريق</label><ColorPicker value={t.color} onChange={c=>setT({...t,color:c})} /></div>
-            <button className="btn-gold" onClick={()=>push({ [key]:t })}>حفظ الفريق</button>
+            <button className="btn-gold" onClick={()=>push({ [key]:t }).then(() => showToast.success("تم حفظ بيانات الفريق."))}>حفظ الفريق</button>
             <div style={{ marginTop:"0.5rem", borderTop:"1px solid #1a2332", paddingTop:"0.75rem" }}>
               <div style={{ fontWeight:700, color:"#f59e0b", marginBottom:"0.35rem" }}>أعضاء الفريق</div>
               <div style={{ fontSize:"0.75rem", color:"#94a3b8", marginBottom:"0.45rem" }}>
@@ -2705,7 +2729,7 @@ function GameSettings({ room, push }: { room: RoomState; push: (u: Partial<RoomS
               questionStatus: "idle" as const,
               winnerMessage: "",
               winnerTeam: 0 as const,
-            });
+            }).then(() => showToast.success("تم حفظ إعدادات اللعبة."));
           } else {
             void push({
               gridSize: gs,
@@ -2717,7 +2741,7 @@ function GameSettings({ room, push }: { room: RoomState; push: (u: Partial<RoomS
               stealMode: sm,
               gameTitle: gt,
               logoText: lt,
-            });
+            }).then(() => showToast.success("تم حفظ إعدادات اللعبة."));
           }
         }}>
         حفظ الإعدادات
@@ -2770,12 +2794,13 @@ function PlayersSettings({ room, roomCode, push }: { room: RoomState; roomCode: 
   };
 
   const reassign = async (playerId: string, t: 0|1|2) => {
-    try { await assignPlayerTeam(roomCode, playerId, t); }
+    try { await assignPlayerTeam(roomCode, playerId, t); showToast.success("تم تحديث فريق المشارك."); }
     catch (e) { console.error(e); showToast.error("فشل التعديل"); }
   };
 
   const remove = async (playerId: string) => {
-    try { await removePlayer(roomCode, playerId); }
+    if (!window.confirm("هل تريد حذف هذا المشارك؟")) return;
+    try { await removePlayer(roomCode, playerId); showToast.success("تم حذف المشارك."); }
     catch (e) { console.error(e); showToast.error("فشل الحذف"); }
   };
 
@@ -2945,7 +2970,7 @@ function LinksSettings({ room, roomCode }: { room: RoomState; roomCode: string }
         </div>
         <div style={{ display:"flex", gap:"0.5rem" }}>
           <button className="btn-gold" onClick={()=>copyText(dl,"رابط شاشة العرض")}>📋 نسخ رابط شاشة العرض</button>
-          <button className="btn-secondary" onClick={()=>window.open(`/participant?room=${roomCode}`,"_blank")}>🖥 فتح شاشة العرض</button>
+          <button className="btn-secondary" onClick={()=>window.open(`/display?room=${roomCode}`,"_blank","noopener")}>🖥 فتح شاشة العرض</button>
         </div>
       </div>
       <div className="kc-card">
@@ -2985,9 +3010,9 @@ function DangerSettings({ room, push, roomCode }: { room: RoomState; push: (u: P
           showToast.success("تم إعادة ضبط اللعبة");
         })}>↺ إعادة ضبط اللعبة</button>
 
-        <button className="btn-danger" onClick={()=>confirm("هل تريد مسح جميع الأسئلة من اللوحة؟ لا يمكن التراجع.", async()=>{
-          const cb = room.board.map(c=>({...c,question:"",answer:"",category:"",difficulty:"easy" as const,points:1,hint:"",explanation:""}));
-          await push({ board:cb });
+        <button className="btn-danger" onClick={()=>confirm("هل تريد مسح جميع الأسئلة من اللوحة وبنك الاحتياطي؟ لا يمكن التراجع.", async()=>{
+          const cb = room.board.map(c=>({...c,question:"",answer:"",category:"",difficulty:"easy" as const,points:1,hint:"",explanation:"", ...( { questionBank: [] } as any)}));
+          await push({ board:cb, questionBankByLetter:{} });
           showToast.success("تم مسح جميع الأسئلة");
         })}>🗑 مسح جميع الأسئلة</button>
 

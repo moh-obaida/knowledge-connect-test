@@ -5,10 +5,9 @@ import JoinPage from "./pages/JoinPage";
 import ParticipantView from "./pages/ParticipantView";
 import Home from "./pages/Home";
 import DisplayMode from "./pages/DisplayMode";
-import { useLanguage } from "./hooks/useLanguage";
+import NotFound from "./pages/NotFound";
 
 function App() {
-  const { t } = useLanguage();
   return (
     <>
       <Toaster position="top-center" richColors />
@@ -19,12 +18,7 @@ function App() {
         <Route path="/participant" component={ParticipantView} />
         <Route path="/display" component={DisplayMode} />
         <Route>
-          <div className="min-h-screen flex items-center justify-center text-center p-8">
-            <div>
-              <div className="text-6xl mb-4">٤٠٤</div>
-              <div className="text-xl text-[#64748b]">{t("app.notFound")}</div>
-            </div>
-          </div>
+          <NotFound />
         </Route>
       </Switch>
     </>

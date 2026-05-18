@@ -175,7 +175,7 @@ export default function ParticipantView() {
             <div style={{ fontWeight:700, color:accent, marginBottom:"0.25rem" }}>تعليمات سريعة</div>
             <div>• ابقِ هذه الصفحة مفتوحة حتى يبدأ المضيف التحدي.</div>
             <div>• ستظهر اللوحة والأسئلة تلقائياً عند البدء.</div>
-            <div>• يمكنك الانضمام إلى فريق إذا لم تكن مُعيَّناً بعد.</div>
+          <div>• سيُعيّنك المضيف إلى الفريق المناسب إذا لم تكن مُعيَّناً بعد.</div>
           </div>
 
           <div style={{ display:"flex", gap:"1rem", justifyContent:"center", marginTop:"1.1rem" }}>
@@ -194,7 +194,7 @@ export default function ParticipantView() {
   return (
     <div style={{ minHeight:"100vh", background:bg, position:"relative" }}>
       {/* Page badge + fullscreen */}
-      <div style={{ position:"fixed", top:"0.75rem", left:"0.75rem", zIndex:50, display:"flex", gap:"0.4rem" }}>
+      <div style={{ position:"fixed", top:"0.75rem", insetInlineStart:"0.75rem", zIndex:50, display:"flex", gap:"0.4rem" }}>
         <div style={{ fontSize:"0.65rem", padding:"0.2rem 0.55rem", borderRadius:"9999px", background:surface.card, color:surface.muted, fontWeight:600 }}>🏷 شاشة العرض</div>
         <button onClick={toggleFullscreen} style={{ fontSize:"0.65rem", padding:"0.2rem 0.55rem", borderRadius:"9999px", background:surface.card, color:surface.muted, border:"none", cursor:"pointer", fontFamily:"var(--kc-font-arabic)" }}>
           {fullscreen ? "⊡ خروج" : "⛶ ملء الشاشة"}
@@ -220,7 +220,7 @@ export default function ParticipantView() {
           {logoText && <div style={{ fontSize:"0.9rem", color:"#94a3b8" }}>{logoText}</div>}
           <div style={{ fontSize:"0.75rem", color:"#475569", marginTop:"0.25rem" }}>
             غرفة: <span style={{ color:accent, fontWeight:700 }}>{roomCode}</span>
-            {roundNumber > 1 && <span style={{ marginRight:"0.75rem", color:surface.muted }}>• الجولة {roundNumber}</span>}
+            {roundNumber > 1 && <span style={{ marginInlineStart:"0.75rem", color:surface.muted }}>• الجولة {roundNumber}</span>}
           </div>
         </div>
 
@@ -325,6 +325,12 @@ export default function ParticipantView() {
                 <div style={{ fontSize:"clamp(2rem, 4.8vw, 3.1rem)", fontWeight:900, color:surface.text, lineHeight:1.45, marginBottom:"0.85rem", direction:"rtl" }}>
                   {activeQuestion.question}
                 </div>
+
+                {(activeQuestion as any).imageUrl && (
+                  <div style={{ marginBottom:"0.85rem", borderRadius:16, overflow:"hidden", border:`1.5px solid ${surface.border}`, background:"#0f1623" }}>
+                    <img src={(activeQuestion as any).imageUrl} alt="صورة السؤال" style={{ display:"block", width:"100%", maxHeight:260, objectFit:"contain" }} />
+                  </div>
+                )}
 
                 {(activeQuestion as any).type === "mcq" && Array.isArray((activeQuestion as any).choices) && (activeQuestion as any).choices.length > 0 && (
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))", gap:"0.45rem", marginBottom:"0.8rem" }}>

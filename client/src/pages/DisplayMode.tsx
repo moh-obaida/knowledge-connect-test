@@ -20,18 +20,19 @@ export default function DisplayMode() {
   const roomCode = getParam("room");
   const [room, setRoom] = useState<RoomState | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [firebaseError, setFirebaseError] = useState(false);
   const unsubRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!roomCode) { setLocation("/host"); return; }
-    if (!isFirebaseConfigured()) return;
+    if (!isFirebaseConfigured()) { setFirebaseError(true); return; }
     try {
       const unsub = subscribeToRoom(roomCode, (s) => {
         if (s === null) setNotFound(true);
         else { setRoom(s); setNotFound(false); }
       });
       unsubRef.current = unsub;
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); setFirebaseError(true); }
     return () => { unsubRef.current?.(); };
   }, [roomCode, setLocation]);
 
@@ -52,6 +53,19 @@ export default function DisplayMode() {
           <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#ef4444", marginBottom: "0.5rem" }}>{tr("display.roomNotFound", language)}</div>
           <div style={{ color: "#94a3b8", marginBottom: "1.5rem" }}>{tr("display.checkRoomCode", language)}</div>
           <a href="/host" style={linkBack}>{tr("display.backToHost", language)}</a>
+        </div>
+      </div>
+    );
+  }
+
+  if (firebaseError) {
+    return (
+      <div style={pageBg}>
+        <div style={{ textAlign: "center", maxWidth: 420 }}>
+          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⚙️</div>
+          <div style={{ fontSize: "1.35rem", fontWeight: 800, color: "#f59e0b", marginBottom: "0.5rem" }}>تعذر الاتصال بالخدمة</div>
+          <div style={{ color: "#94a3b8", marginBottom: "1.5rem", lineHeight: 1.8 }}>راجع إعدادات الاتصال ثم حاول فتح شاشة العرض مرة أخرى.</div>
+          <a href="/host" style={linkBack}>العودة إلى لوحة المضيف</a>
         </div>
       </div>
     );
@@ -129,6 +143,11 @@ export default function DisplayMode() {
                     <div style={{ fontSize: "clamp(1.1rem, 2.5vw, 1.5rem)", fontWeight: 700, color: "#f0ede8", lineHeight: 1.6, direction: "rtl" }}>
                       {room.activeQuestion.question}
                     </div>
+                    {room.activeQuestion.imageUrl && (
+                      <div style={{ marginTop: "0.7rem", borderRadius: 12, overflow: "hidden", border: "1.5px solid #1a2332", background: "#0f1623" }}>
+                        <img src={room.activeQuestion.imageUrl} alt="صورة السؤال" style={{ display: "block", width: "100%", maxHeight: 260, objectFit: "contain" }} />
+                      </div>
+                    )}
                     {room.activeQuestion.type === "mcq" && Array.isArray(room.activeQuestion.choices) && room.activeQuestion.choices.length > 0 && (
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.4rem", marginTop: "0.7rem" }}>
                         {room.activeQuestion.choices.map((c, i) => {
@@ -157,6 +176,12 @@ export default function DisplayMode() {
                       </div>
                       );
                     })()}
+                    {room.hintVisibleToParticipants && room.activeQuestion.hint && (
+                      <div style={{ marginTop: "0.7rem", padding: "0.6rem 0.85rem", borderRadius: 10, background: "rgba(245,158,11,0.1)", border: "1.5px solid rgba(245,158,11,0.35)" }}>
+                        <div style={{ fontSize: "0.74rem", color: "#f59e0b", fontWeight: 700, marginBottom: "0.2rem" }}>تلميح</div>
+                        <div style={{ color: "#f0ede8", fontWeight: 700 }}>{room.activeQuestion.hint}</div>
+                      </div>
+                    )}
                     {room.answerVisibleToParticipants && (
                       <div style={{ marginTop: "0.7rem", padding: "0.6rem 0.85rem", borderRadius: 10, background: "rgba(34,197,94,0.12)", border: "1.5px solid rgba(34,197,94,0.4)" }}>
                         <div style={{ fontSize: "0.74rem", color: "#22c55e", fontWeight: 700, marginBottom: "0.2rem" }}>{tr("display.correctAnswer", language)}</div>
